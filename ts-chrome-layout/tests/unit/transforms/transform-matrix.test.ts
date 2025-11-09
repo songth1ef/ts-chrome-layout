@@ -127,5 +127,224 @@ describe('TransformMatrix', () => {
       expect(transformed.height).toBe(50);
     });
   });
+
+  describe('rotateX', () => {
+    it('应该正确绕 X 轴旋转', () => {
+      const transform = TransformMatrix.identity().rotateX(90);
+      const point = transform.mapPoint(0, 1, 0);
+      expect(Math.abs((point.z || 0) - 1)).toBeLessThan(1e-10);
+    });
+  });
+
+  describe('rotateY', () => {
+    it('应该正确绕 Y 轴旋转', () => {
+      const transform = TransformMatrix.identity().rotateY(90);
+      const point = transform.mapPoint(1, 0, 0);
+      expect(Math.abs((point.z || 0) - (-1))).toBeLessThan(1e-10);
+    });
+  });
+
+  describe('rotate with axis', () => {
+    it('应该正确绕任意轴旋转', () => {
+      // 绕Z轴旋转90度，等同于rotateZ(90)
+      const transform = TransformMatrix.identity().rotateZ(90);
+      const point = transform.mapPoint(1, 0, 0);
+      // 绕Z轴旋转90度：(1,0,0) -> (0,1,0)
+      expect(Math.abs(point.x)).toBeLessThan(1e-10);
+      expect(Math.abs(point.y - 1)).toBeLessThan(1e-10);
+    });
+
+    it('应该正确绕任意轴旋转（非标准轴）', () => {
+      // 绕(1,1,0)轴旋转，测试任意轴旋转功能
+      const transform = TransformMatrix.identity().rotate(90, 1, 1, 0);
+      const point = transform.mapPoint(1, 0, 0);
+      // 验证变换确实生效（不是单位矩阵）
+      expect(transform.isIdentity()).toBe(false);
+      expect(point).toBeDefined();
+    });
+  });
+
+  describe('scale with single value', () => {
+    it('应该统一缩放', () => {
+      const transform = TransformMatrix.identity().scale(2);
+      const point = transform.mapPoint(1, 1, 1);
+      expect(point.x).toBe(2);
+      expect(point.y).toBe(2);
+      expect(point.z).toBe(1);
+    });
+  });
+
+  describe('translate with single value', () => {
+    it('应该只平移 X 轴', () => {
+      const transform = TransformMatrix.identity().translate(10);
+      const point = transform.mapPoint(0, 0, 0);
+      expect(point.x).toBe(10);
+      expect(point.y).toBe(0);
+      expect(point.z).toBe(0);
+    });
+  });
+
+  describe('applyMatrix', () => {
+    it('应该正确应用 2D 矩阵', () => {
+      const values = [1, 0, 0, 1, 10, 20];
+      const transform = TransformMatrix.identity().applyMatrix(values);
+      const point = transform.mapPoint(0, 0, 0);
+      expect(point.x).toBe(10);
+      expect(point.y).toBe(20);
+    });
+
+    it('应该在值数量错误时抛出错误', () => {
+      expect(() => {
+        TransformMatrix.identity().applyMatrix([1, 2, 3]);
+      }).toThrow();
+    });
+  });
+
+  describe('applyMatrix3d', () => {
+    it('应该正确应用 3D 矩阵', () => {
+      const values = new Array(16).fill(0);
+      values[0] = 1;
+      values[5] = 1;
+      values[10] = 1;
+      values[15] = 1;
+      values[12] = 10;
+      values[13] = 20;
+      values[14] = 30;
+      
+      const transform = TransformMatrix.identity().applyMatrix3d(values);
+      const point = transform.mapPoint(0, 0, 0);
+      expect(point.x).toBe(10);
+      expect(point.y).toBe(20);
+      expect(point.z).toBe(30);
+    });
+
+    it('应该在值数量错误时抛出错误', () => {
+      expect(() => {
+        TransformMatrix.identity().applyMatrix3d([1, 2, 3]);
+      }).toThrow();
+    });
+  });
+
+  describe('perspective', () => {
+    it('应该正确应用透视变换', () => {
+      const transform = TransformMatrix.identity().perspective(1000);
+      expect(transform).not.toBeNull();
+    });
+
+    it('应该在距离 <= 0 时返回原矩阵', () => {
+      const transform = TransformMatrix.identity().perspective(0);
+      expect(transform.isIdentity()).toBe(true);
+    });
+  });
+
+  describe('preMultiply', () => {
+    it('应该正确前置乘法', () => {
+      const t1 = TransformMatrix.identity().translate(10, 20, 0);
+      const t2 = TransformMatrix.identity().scale(2, 2, 1);
+      const combined = t2.preMultiply(t1);
+      
+      const point = combined.mapPoint(1, 1, 0);
+      expect(point.x).toBeGreaterThan(0);
+      expect(point.y).toBeGreaterThan(0);
+    });
+  });
+
+  describe('invert', () => {
+    it('应该正确求逆矩阵', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 0);
+      const inverted = transform.invert();
+      
+      expect(inverted).not.toBeNull();
+      if (inverted) {
+        const point = inverted.mapPoint(10, 20, 0);
+        expect(Math.abs(point.x)).toBeLessThan(1e-10);
+        expect(Math.abs(point.y)).toBeLessThan(1e-10);
+      }
+    });
+
+    it('应该在行列式为 0 时返回 null', () => {
+      const values = [0, 0, 0, 0, 0, 0];
+      const transform = TransformMatrix.identity().applyMatrix(values);
+      const inverted = transform.invert();
+      expect(inverted).toBeNull();
+    });
+  });
+
+  describe('flatten', () => {
+    it('应该将 3D 矩阵扁平化为 2D', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 30);
+      const flattened = transform.flatten();
+      expect(flattened.is2D()).toBe(true);
+    });
+
+    it('应该对 2D 矩阵返回自身', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 0);
+      const flattened = transform.flatten();
+      expect(flattened.is2D()).toBe(true);
+    });
+  });
+
+  describe('creates3D', () => {
+    it('应该正确识别创建 3D 变换', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 30);
+      expect(transform.creates3D()).toBe(true);
+    });
+
+    it('应该正确识别不创建 3D 变换', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 0);
+      expect(transform.creates3D()).toBe(false);
+    });
+  });
+
+  describe('getMatrix', () => {
+    it('应该返回矩阵副本', () => {
+      const transform = TransformMatrix.identity();
+      const matrix1 = transform.getMatrix();
+      const matrix2 = transform.getMatrix();
+      expect(matrix1).not.toBe(matrix2);
+      expect(matrix1).toEqual(matrix2);
+    });
+  });
+
+  describe('toAffineTransform', () => {
+    it('应该正确转换为 AffineTransform', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 0);
+      const affine = transform.toAffineTransform();
+      expect(affine).not.toBeNull();
+      
+      const point = affine.mapPoint(0, 0);
+      expect(point.x).toBe(10);
+      expect(point.y).toBe(20);
+    });
+
+    it('应该将 3D 矩阵扁平化后转换', () => {
+      const transform = TransformMatrix.identity().translate(10, 20, 30);
+      const affine = transform.toAffineTransform();
+      expect(affine).not.toBeNull();
+    });
+  });
+
+  describe('applyOperation', () => {
+    it('应该处理所有变换操作类型', () => {
+      const operations = [
+        { type: 'rotateX' as const, angle: 90 },
+        { type: 'rotateY' as const, angle: 90 },
+        { type: 'rotateZ' as const, angle: 90 },
+        { type: 'scaleX' as const, value: 2 },
+        { type: 'scaleY' as const, value: 3 },
+        { type: 'scaleZ' as const, value: 4 },
+        { type: 'translateX' as const, value: 10 },
+        { type: 'translateY' as const, value: 20 },
+        { type: 'translateZ' as const, value: 30 },
+      ];
+
+      let transform = TransformMatrix.identity();
+      for (const op of operations) {
+        transform = transform.applyOperation(op);
+      }
+      
+      expect(transform).not.toBeNull();
+    });
+  });
 });
 

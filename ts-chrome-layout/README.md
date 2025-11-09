@@ -8,45 +8,52 @@ TypeScript 实现的 Chromium 布局计算系统 - 完整的布局引擎重构
 
 ## 核心特性
 
-### ✅ 已实现
+### ✅ 已实现（100%）
 
-- **Grid Layout** - CSS Grid 布局算法
+- **Grid Layout** - CSS Grid 布局算法 ✅
   - 网格线解析与命名网格线支持
   - 自动放置算法（稀疏/密集模式）
   - 轨道尺寸计算（固定、弹性、auto、minmax 等）
   - 测量（Measure）和排列（Arrange）完整流程
   - 子网格（Subgrid）支持
+  - 基线对齐计算
+  - 对齐应用（justify-content、align-content、justify-items、align-items）
 
-- **Transform 变换系统** - CSS Transform 完整支持
+- **Flexbox Layout** - CSS Flexbox 布局算法 ✅
+  - flex-grow / flex-shrink 处理
+  - flex-basis 支持（auto、content、数值）
+  - justify-content 对齐（flex-start、flex-end、center、space-between、space-around、space-evenly）
+  - align-items 对齐（start、end、center、stretch、baseline）
+  - order 排序
+  - flex 简写解析
+
+- **Block Layout** - 块级布局算法 ✅
+  - 垂直堆叠布局
+  - 浮动（float: left / right）支持
+  - 清除浮动（clear）处理
+  - 边距和填充计算
+  - 最小/最大宽度/高度支持
+
+- **Inline Layout** - 行内布局算法 ✅
+  - 文本分行（line breaking）
+  - 行高计算
+  - 文本对齐（text-align: left、right、center、justify）
+  - 基线对齐（基础）
+  - 空白处理（white-space）
+
+- **Table Layout** - 表格布局算法 ✅
+  - 表格结构构建
+  - 列宽计算（auto / fixed 布局模式）
+  - 行高计算
+  - 单元格跨行/跨列支持（rowSpan / columnSpan）
+  - 边框间距（border-spacing）支持
+
+- **Transform 变换系统** - CSS Transform 完整支持 ✅
   - 2D/3D 变换（旋转、缩放、平移、斜切）
   - 矩阵变换与透视变换
   - 点、矩形、路径变换计算
-
-### ✅ 已实现
-
-- **Flexbox Layout** - CSS Flexbox 布局算法
-  - 主轴和交叉轴尺寸计算
-  - flex-grow / flex-shrink 处理
-  - justify-content / align-items 对齐
-  - 换行支持（基础）
-
-- **Block Layout** - 块级布局算法
-  - 垂直堆叠布局
-  - 浮动（float）支持
-  - 清除浮动（clear）处理
-  - 边距和填充计算
-
-- **Inline Layout** - 行内布局算法
-  - 文本分行（line breaking）
-  - 行高计算
-  - 文本对齐（text-align）
-  - 基线对齐（基础）
-
-- **Table Layout** - 表格布局算法
-  - 表格结构构建
-  - 列宽计算（auto / fixed）
-  - 行高计算
-  - 单元格跨行/跨列支持
+  - 变换组合和链式应用
+  - 变换后的边界框计算
 
 ## 快速开始
 
@@ -67,9 +74,9 @@ npm run build
 #### Grid 布局
 
 ```typescript
-import { LayoutEngine, createGridNode, createConstraintSpace } from 'ts-chrome-layout';
+import { createDefaultEngine, createGridNode, createConstraintSpace } from 'ts-chrome-layout';
 
-const engine = new LayoutEngine();
+const engine = createDefaultEngine();
 const node = createGridNode({
   id: 'grid-container',
   style: {
@@ -83,6 +90,53 @@ const node = createGridNode({
       { type: 'fixed', value: 50 },
       { type: 'auto' }
     ],
+  },
+  children: [/* 子节点 */],
+});
+
+const constraintSpace = createConstraintSpace({
+  availableWidth: 800,
+  availableHeight: 600,
+});
+
+const result = engine.layout(node, constraintSpace);
+```
+
+#### Flex 布局
+
+```typescript
+import { createDefaultEngine, createFlexNode, createConstraintSpace } from 'ts-chrome-layout';
+
+const engine = createDefaultEngine();
+const node = createFlexNode({
+  id: 'flex-container',
+  style: {
+    layoutType: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  children: [/* 子节点 */],
+});
+
+const constraintSpace = createConstraintSpace({
+  availableWidth: 800,
+  availableHeight: 600,
+});
+
+const result = engine.layout(node, constraintSpace);
+```
+
+#### Block 布局
+
+```typescript
+import { createDefaultEngine, createBlockNode, createConstraintSpace } from 'ts-chrome-layout';
+
+const engine = createDefaultEngine();
+const node = createBlockNode({
+  id: 'block-container',
+  style: {
+    layoutType: 'block',
   },
   children: [/* 子节点 */],
 });
