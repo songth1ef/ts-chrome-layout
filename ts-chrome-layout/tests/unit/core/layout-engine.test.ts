@@ -3,8 +3,14 @@
  */
 
 import { LayoutEngine } from '../../../src/core/layout-engine';
-import { LayoutNode } from '../../../src/types/common/layout-node';
-// import { ConstraintSpace } from '../../../src/types/common/constraint-space';
+import { LayoutAlgorithm } from '../../../src/core/layout-algorithm';
+import {
+  LayoutNode,
+  MeasureResult,
+  ArrangeResult,
+  LayoutResult,
+} from '../../../src/types/common/layout-node';
+import { ConstraintSpace } from '../../../src/types/common/constraint-space';
 import { createConstraintSpace } from '../../../src/utils/common/constraint-space-factory';
 
 describe('LayoutEngine', () => {
@@ -31,8 +37,45 @@ describe('LayoutEngine', () => {
 
   describe('算法注册', () => {
     it('应该支持注册算法', () => {
-      // TODO: 实现算法注册测试
-      // 需要先实现一个测试用的算法
+      // 创建一个简单的测试算法
+      class TestLayoutAlgorithm implements LayoutAlgorithm {
+        readonly layoutType = 'none' as const;
+        
+        measure(_node: LayoutNode, _constraintSpace: ConstraintSpace): MeasureResult {
+          return { width: 100, height: 100 };
+        }
+        
+        arrange(
+          _node: LayoutNode,
+          _constraintSpace: ConstraintSpace,
+          _measureResult: MeasureResult
+        ): ArrangeResult {
+          return {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            children: [],
+          };
+        }
+        
+        layout(_node: LayoutNode, _constraintSpace: ConstraintSpace): LayoutResult {
+          return {
+            width: 100,
+            height: 100,
+            children: [],
+          };
+        }
+      }
+      
+      const testAlgorithm = new TestLayoutAlgorithm();
+      
+      // 注册算法
+      engine.register(testAlgorithm);
+      
+      // 验证算法已注册
+      expect(engine.supports('none')).toBe(true);
+      expect(engine.getRegisteredTypes()).toContain('none');
     });
 
     it('应该返回已注册的类型', () => {

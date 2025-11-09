@@ -24,10 +24,15 @@ export class GridTrackCollectionImpl implements GridTrackCollection {
    * 
    * 对应 Chromium: GridLayoutTrackCollection::GetSetOffset()
    */
-  getSetOffset(_setIndex: number): number {
-    // TODO: 实现偏移量计算
-    // 对应 Chromium: GetSetOffset()
-    return 0;
+  getSetOffset(setIndex: number): number {
+    if (setIndex < 0 || setIndex >= this.sets.length) {
+      return 0;
+    }
+    let offset = 0;
+    for (let i = 0; i < setIndex; i++) {
+      offset += this.sets[i].baseSize * this.sets[i].trackCount;
+    }
+    return offset;
   }
   
   /**
@@ -35,10 +40,12 @@ export class GridTrackCollectionImpl implements GridTrackCollection {
    * 
    * 对应 Chromium: GridLayoutTrackCollection::GetSetSize()
    */
-  getSetSize(_setIndex: number): number {
-    // TODO: 实现大小计算
-    // 对应 Chromium: GetSetSize()
-    return 0;
+  getSetSize(setIndex: number): number {
+    if (setIndex < 0 || setIndex >= this.sets.length) {
+      return 0;
+    }
+    const set = this.sets[setIndex];
+    return set.baseSize * set.trackCount;
   }
   
   /**
@@ -46,10 +53,19 @@ export class GridTrackCollectionImpl implements GridTrackCollection {
    * 
    * 对应 Chromium: GridTrackCollectionBase::RangeIndexFromGridLine()
    */
-  getRangeIndexFromLine(_line: number): number {
-    // TODO: 实现范围索引查找
-    // 对应 Chromium: RangeIndexFromGridLine()
-    return 0;
+  getRangeIndexFromLine(line: number): number {
+    if (line < 0) {
+      return 0;
+    }
+    let currentLine = 0;
+    for (let i = 0; i < this.ranges.length; i++) {
+      const range = this.ranges[i];
+      if (line >= currentLine && line < currentLine + range.trackCount) {
+        return i;
+      }
+      currentLine += range.trackCount;
+    }
+    return this.ranges.length - 1;
   }
   
   /**
@@ -58,7 +74,23 @@ export class GridTrackCollectionImpl implements GridTrackCollection {
    * 对应 Chromium: 检查轨道集合中是否有内在尺寸轨道
    */
   hasIntrinsicTrack(): boolean {
-    // TODO: 实现内在轨道检查
+    for (const set of this.sets) {
+      const sizingFunction = set.sizingFunction;
+      if (
+        sizingFunction.type === 'min-content' ||
+        sizingFunction.type === 'max-content' ||
+        sizingFunction.type === 'auto' ||
+        (sizingFunction.type === 'minmax' &&
+          (sizingFunction.min.type === 'min-content' ||
+            sizingFunction.min.type === 'max-content' ||
+            sizingFunction.min.type === 'auto' ||
+            sizingFunction.max.type === 'min-content' ||
+            sizingFunction.max.type === 'max-content' ||
+            sizingFunction.max.type === 'auto'))
+      ) {
+        return true;
+      }
+    }
     return false;
   }
   
@@ -68,7 +100,16 @@ export class GridTrackCollectionImpl implements GridTrackCollection {
    * 对应 Chromium: 检查轨道集合中是否有 fr 轨道
    */
   hasFlexibleTrack(): boolean {
-    // TODO: 实现弹性轨道检查
+    for (const set of this.sets) {
+      const sizingFunction = set.sizingFunction;
+      if (
+        sizingFunction.type === 'fr' ||
+        (sizingFunction.type === 'minmax' &&
+          (sizingFunction.min.type === 'fr' || sizingFunction.max.type === 'fr'))
+      ) {
+        return true;
+      }
+    }
     return false;
   }
 }
