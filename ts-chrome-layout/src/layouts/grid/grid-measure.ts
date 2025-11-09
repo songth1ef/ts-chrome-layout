@@ -42,6 +42,21 @@ export class GridMeasureAlgorithm {
     node: LayoutNode,
     constraintSpace: ConstraintSpace
   ): MeasureResult {
+    return this.measureWithConstraint(node, constraintSpace, SizingConstraint.Layout);
+  }
+  
+  /**
+   * 使用指定约束进行测量
+   * 
+   * 对应 Chromium: GridLayoutAlgorithm::ComputeMinMaxSizes()
+   * 
+   * @param constraint - 尺寸约束（Layout、MinContent、MaxContent）
+   */
+  measureWithConstraint(
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace,
+    constraint: SizingConstraint
+  ): MeasureResult {
     // 步骤 1: 检查是否有继承的 GridLayoutTree（子网格情况）
     // 对应 Chromium: constraint_space.GetGridLayoutSubtree()
     if (constraintSpace.gridLayoutTree) {
@@ -56,9 +71,9 @@ export class GridMeasureAlgorithm {
     // 对应 Chromium: InitializeTrackSizes()
     this.initializeTrackSizes(sizingTree);
     
-    // 步骤 4: 计算基线对齐（简化实现：跳过）
+    // 步骤 4: 计算基线对齐
     // 对应 Chromium: ComputeGridItemBaselines()
-    // this.computeGridItemBaselines(sizingTree);
+    this.computeGridItemBaselines(sizingTree);
     
     // 步骤 5: 完成轨道尺寸算法
     // 对应 Chromium: CompleteTrackSizingAlgorithm()
@@ -66,14 +81,14 @@ export class GridMeasureAlgorithm {
     this.completeTrackSizingAlgorithm(
       sizingTree,
       GridTrackDirection.Column,
-      SizingConstraint.Layout,
+      constraint,
       needsAdditionalPass,
       constraintSpace
     );
     this.completeTrackSizingAlgorithm(
       sizingTree,
       GridTrackDirection.Row,
-      SizingConstraint.Layout,
+      constraint,
       needsAdditionalPass,
       constraintSpace
     );
@@ -102,6 +117,10 @@ export class GridMeasureAlgorithm {
     return {
       width: totalWidth,
       height: totalHeight,
+      // 存储布局数据供 arrange 阶段使用
+      gridLayoutData: layoutData,
+      gridItems: sizingTree.getNode(0).gridItems,
+      sizingTree: sizingTree,
     };
   }
   
@@ -133,17 +152,226 @@ export class GridMeasureAlgorithm {
    * 测量子网格
    * 
    * 对应 Chromium: GridLayoutAlgorithm::LayoutInternal() 中的子网格分支
+   * 
+   * 子网格从父网格继承 GridLayoutTree，使用父网格的轨道定义
    */
   private measureSubgrid(
-    _node: LayoutNode,
-    _constraintSpace: ConstraintSpace
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace
   ): MeasureResult {
-    // TODO: 实现子网格测量
-    // 对应 Chromium: 直接使用继承的 GridLayoutTree
-    return {
-      width: 0,
-      height: 0,
+    // 从约束空间获取继承的 GridLayoutTree
+    const parentLayoutTree = constraintSpace.gridLayoutTree;
+    if (!parentLayoutTree) {
+      throw new Error('Subgrid measurement requires gridLayoutTree in constraintSpace');
+    }
+    
+    const style = node.style as GridStyle;
+    if (!style || style.layoutType !== 'grid') {
+      throw new Error('Subgrid node must have grid style');
+    }
+    
+    // 检查子网格继承的方向
+    // 子网格的 gridTemplateColumns 或 gridTemplateRows 应该是 'subgrid' 字符串
+    // 或者是一个特殊的对象类型
+    const hasSubgriddedColumns = 
+      (typeof style.gridTemplateColumns === 'string' && style.gridTemplateColumns === 'subgrid') ||
+      (Array.isArray(style.gridTemplateColumns) && style.gridTemplateColumns.length === 0) ||
+      (style.gridTemplateColumns as any)?.type === 'subgrid';
+    const hasSubgriddedRows = 
+      (typeof style.gridTemplateRows === 'string' && style.gridTemplateRows === 'subgrid') ||
+      (Array.isArray(style.gridTemplateRows) && style.gridTemplateRows.length === 0) ||
+      (style.gridTemplateRows as any)?.type === 'subgrid';
+    
+    // 从父布局树获取布局数据
+    const parentLayoutData = parentLayoutTree.getNode(0).layoutData;
+    
+    // 创建子网格的布局数据
+    // 如果列方向是子网格，使用父网格的列；否则创建新的列轨道集合
+    const columns = hasSubgriddedColumns
+      ? parentLayoutData.columns
+      : this.buildTrackCollectionFromStyle(
+          style.gridTemplateColumns || [],
+          GridTrackDirection.Column,
+          constraintSpace
+        );
+    
+    // 如果行方向是子网格，使用父网格的行；否则创建新的行轨道集合
+    const rows = hasSubgriddedRows
+      ? parentLayoutData.rows
+      : this.buildTrackCollectionFromStyle(
+          style.gridTemplateRows || [],
+          GridTrackDirection.Row,
+          constraintSpace
+        );
+    
+    // 创建子网格的布局数据
+    const layoutData: GridLayoutData = {
+      columns,
+      rows,
     };
+    
+    // 构建子网格的网格项（从子节点）
+    const gridItemsCollection = this.constructGridItems(node, this.createLineResolver(node, constraintSpace));
+    const gridItems = gridItemsCollection.getAll();
+    
+    // 初始化轨道尺寸（只初始化非子网格方向的轨道）
+    if (!hasSubgriddedColumns) {
+      this.initializeTrackSizesForCollection(columns as GridTrackCollectionImpl);
+    }
+    if (!hasSubgriddedRows) {
+      this.initializeTrackSizesForCollection(rows as GridTrackCollectionImpl);
+    }
+    
+    // 完成轨道尺寸算法（只对非子网格方向）
+    let needsAdditionalPass = false;
+    const sizingTree = this.createSizingTreeForSubgrid(layoutData, gridItems, constraintSpace);
+    if (!hasSubgriddedColumns) {
+      this.completeTrackSizingAlgorithm(
+        sizingTree,
+        GridTrackDirection.Column,
+        SizingConstraint.Layout,
+        needsAdditionalPass,
+        constraintSpace
+      );
+    }
+    if (!hasSubgriddedRows) {
+      this.completeTrackSizingAlgorithm(
+        sizingTree,
+        GridTrackDirection.Row,
+        SizingConstraint.Layout,
+        needsAdditionalPass,
+        constraintSpace
+      );
+    }
+    
+    // 计算总尺寸
+    const totalWidth = this.calculateTotalSize(columns as GridTrackCollectionImpl);
+    const intrinsicBlockSize = this.calculateIntrinsicBlockSize(gridItems, layoutData);
+    
+    return {
+      width: totalWidth,
+      height: intrinsicBlockSize,
+      gridLayoutData: layoutData,
+      gridItems,
+    };
+  }
+  
+  /**
+   * 为子网格创建简化的 Sizing Tree
+   */
+  private createSizingTreeForSubgrid(
+    layoutData: GridLayoutData,
+    gridItems: GridItemData[],
+    constraintSpace: ConstraintSpace
+  ): GridSizingTreeImpl {
+    const sizingTree = new GridSizingTreeImpl();
+    sizingTree.addNode({
+      gridItems,
+      layoutData,
+      subtreeSize: 1,
+      writingMode: constraintSpace.writingMode || WritingMode.HorizontalTb,
+    });
+    return sizingTree;
+  }
+  
+  /**
+   * 初始化单个轨道集合的尺寸
+   */
+  private initializeTrackSizesForCollection(collection: GridTrackCollectionImpl): void {
+    for (const set of collection.sets) {
+      const sizingFunction = set.sizingFunction;
+      
+      if (sizingFunction.type === 'fixed') {
+        set.baseSize = sizingFunction.value;
+        set.growthLimit = sizingFunction.value;
+      } else if (sizingFunction.type === 'fr') {
+        set.baseSize = 0;
+        set.growthLimit = Infinity;
+      } else {
+        set.baseSize = 0;
+        set.growthLimit = Infinity;
+      }
+    }
+  }
+  
+  /**
+   * 从样式构建轨道集合（用于非子网格方向）
+   */
+  private buildTrackCollectionFromStyle(
+    tracks: any[],
+    direction: GridTrackDirection,
+    _constraintSpace: ConstraintSpace
+  ): GridTrackCollectionImpl {
+    const collection = new GridTrackCollectionImpl(direction);
+    
+    // 简化实现：为每个轨道创建一个集合
+    for (const track of tracks) {
+      if (track.type === 'repeat') {
+        const count = typeof track.count === 'number' ? track.count : 1;
+        for (let i = 0; i < count; i++) {
+          for (const subTrack of track.tracks) {
+            collection.sets.push({
+              baseSize: 0,
+              growthLimit: Infinity,
+              trackCount: 1,
+              sizingFunction: subTrack,
+            });
+          }
+        }
+      } else {
+        collection.sets.push({
+          baseSize: 0,
+          growthLimit: Infinity,
+          trackCount: 1,
+          sizingFunction: track,
+        });
+      }
+    }
+    
+    return collection;
+  }
+  
+  /**
+   * 创建线解析器（用于子网格）
+   */
+  private createLineResolver(
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace
+  ): GridLineResolver {
+    const style = node.style as GridStyle;
+    return new GridLineResolver(
+      style,
+      this.calculateAutoRepetitions(style.gridTemplateColumns, constraintSpace),
+      this.calculateAutoRepetitions(style.gridTemplateRows, constraintSpace)
+    );
+  }
+  
+  /**
+   * 计算自动重复次数（用于子网格）
+   * 
+   * 对应 Chromium: GridLineResolver::ComputeAutoRepetitions()
+   * 
+   * 计算 auto-fill 或 auto-fit 的重复次数
+   */
+  private calculateAutoRepetitions(
+    tracks: any[],
+    constraintSpace: ConstraintSpace
+  ): number {
+    // 查找 auto-fill 或 auto-fit
+    for (const track of tracks) {
+      if (track.type === 'repeat' && (track.count === 'auto-fill' || track.count === 'auto-fit')) {
+        // 使用 computeAutoRepetitions 方法计算
+        // 需要确定是列还是行方向（简化：假设是列方向）
+        const availableSize = typeof constraintSpace.availableWidth === 'number'
+          ? constraintSpace.availableWidth
+          : typeof constraintSpace.availableHeight === 'number'
+          ? constraintSpace.availableHeight
+          : 0;
+        
+        return this.computeAutoRepetitions([track], availableSize);
+      }
+    }
+    return 1;
   }
   
   /**
@@ -228,7 +456,7 @@ export class GridMeasureAlgorithm {
       gridItems: gridItems.getAll(),
       layoutData,
       subtreeSize: 1,
-      writingMode: WritingMode.HorizontalTb, // TODO: 从样式获取
+      writingMode: constraintSpace.writingMode || WritingMode.HorizontalTb,
     });
     
     return sizingTree;
@@ -469,10 +697,78 @@ export class GridMeasureAlgorithm {
    * 计算网格项基线
    * 
    * 对应 Chromium: GridLayoutAlgorithm::ComputeGridItemBaselines()
+   * 
+   * 基线对齐用于 align-items: baseline 和 align-self: baseline
+   * 需要计算每个网格项的第一行基线位置
    */
-  private computeGridItemBaselines(_sizingTree: any): void {
-    // TODO: 实现基线计算
-    // 对应 Chromium: ComputeGridItemBaselines()
+  private computeGridItemBaselines(sizingTree: GridSizingTreeImpl): void {
+    const rootNode = sizingTree.getNode(0);
+    const gridItems = rootNode.gridItems;
+    
+    // 遍历所有网格项，计算基线
+    for (const item of gridItems) {
+      // 基线对齐只适用于行方向（align-items / align-self）
+      // 列方向使用 justify-items / justify-self
+      
+      // 检查项是否使用基线对齐
+      const rowAlignment = item.rowAlignment;
+      if (rowAlignment === ItemAlignment.Baseline) {
+        // 计算项的基线位置
+        // 简化实现：假设基线在项高度的某个位置（通常是第一行文本的基线）
+        // 完整实现需要：
+        // 1. 测量子项的第一行基线
+        // 2. 考虑项的 padding 和 border
+        // 3. 存储基线位置供后续对齐使用
+        
+        // 这里简化实现：假设基线在项高度的 80% 位置（模拟文本基线）
+        const itemHeight = item.node.height || 0;
+        const baselineOffset = itemHeight * 0.8;
+        
+        // 存储基线偏移（可以存储在 item 的额外属性中）
+        // 注意：这里简化实现，实际应该存储在 GridItemData 的基线属性中
+        (item as any).baselineOffset = baselineOffset;
+      }
+    }
+    
+    // 计算行轨道的基线对齐偏移
+    // 对于使用基线对齐的行，需要找到该行中所有项的基线，并计算对齐偏移
+    const layoutData = rootNode.layoutData;
+    const rows = layoutData.rows as GridTrackCollectionImpl;
+    
+    // 按行分组网格项
+    const itemsByRow = new Map<number, GridItemData[]>();
+    for (const item of gridItems) {
+      const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
+      const rowStart = rowSpan.start;
+      
+      if (!itemsByRow.has(rowStart)) {
+        itemsByRow.set(rowStart, []);
+      }
+      itemsByRow.get(rowStart)!.push(item);
+    }
+    
+    // 为每行计算基线对齐偏移
+    for (const [rowIndex, items] of itemsByRow.entries()) {
+      // 找到该行中所有使用基线对齐的项
+      const baselineItems = items.filter(
+        (item) => item.rowAlignment === ItemAlignment.Baseline
+      );
+      
+      if (baselineItems.length > 0) {
+        // 找到最大的基线偏移（用于对齐）
+        let maxBaselineOffset = 0;
+        for (const item of baselineItems) {
+          const baselineOffset = (item as any).baselineOffset || 0;
+          maxBaselineOffset = Math.max(maxBaselineOffset, baselineOffset);
+        }
+        
+        // 存储行的基线对齐偏移（可以存储在行的额外属性中）
+        // 注意：这里简化实现，实际应该存储在 GridSet 或 GridRange 的基线属性中
+        if (rows.sets[rowIndex]) {
+          (rows.sets[rowIndex] as any).baselineOffset = maxBaselineOffset;
+        }
+      }
+    }
   }
   
   /**

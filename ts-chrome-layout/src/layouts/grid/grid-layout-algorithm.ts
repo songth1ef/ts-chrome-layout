@@ -6,6 +6,7 @@ import {
   LayoutResult,
 } from '../../types/common/layout-node';
 import { ConstraintSpace } from '../../types/common/constraint-space';
+import { SizingConstraint } from '../../types/common/enums';
 import { GridMeasureAlgorithm } from './grid-measure';
 import { GridArrangeAlgorithm } from './grid-arrange';
 
@@ -73,13 +74,32 @@ export class GridLayoutAlgorithm extends BaseLayoutAlgorithm {
    * 计算最小最大尺寸
    * 
    * 对应 Chromium: GridLayoutAlgorithm::ComputeMinMaxSizes()
+   * 
+   * 计算网格容器在指定方向上的最小和最大尺寸
+   * - min: 最小内容尺寸（min-content）
+   * - max: 最大内容尺寸（max-content）
    */
   computeMinMaxSizes(
-    _node: LayoutNode,
-    _constraintSpace: ConstraintSpace
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace
   ): { min: number; max: number } {
-    // TODO: 实现最小最大尺寸计算
-    return { min: 0, max: 0 };
+    // 使用测量算法计算最小和最大尺寸
+    const minMeasureResult = this.measureAlgorithm.measureWithConstraint(
+      node,
+      constraintSpace,
+      SizingConstraint.MinContent
+    );
+    const maxMeasureResult = this.measureAlgorithm.measureWithConstraint(
+      node,
+      constraintSpace,
+      SizingConstraint.MaxContent
+    );
+    
+    // 返回最小和最大宽度
+    return {
+      min: minMeasureResult.width || 0,
+      max: maxMeasureResult.width || 0,
+    };
   }
 }
 

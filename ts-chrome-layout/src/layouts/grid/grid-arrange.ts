@@ -36,9 +36,11 @@ export class GridArrangeAlgorithm {
       throw new Error('Node must have grid style');
     }
     
-    // 从 measureResult 获取布局数据（简化实现：从缓存中获取）
-    // TODO: 从 measureResult 中获取实际的布局数据
+    // 从 measureResult 获取布局数据
     const layoutData = this.getLayoutDataFromMeasure(measureResult);
+    if (!layoutData) {
+      throw new Error('Grid layout data not found in measure result');
+    }
     
     // 步骤 1: 计算网格项位置和偏移
     const itemPlacements = this.placeGridItems(
@@ -47,9 +49,9 @@ export class GridArrangeAlgorithm {
       measureResult
     );
     
-    // 步骤 2: 应用对齐（简化实现：跳过）
+    // 步骤 2: 应用对齐
     // 对应 Chromium: 应用 align-content, justify-content 等
-    // this.applyAlignment(node, layoutData, itemPlacements);
+    this.applyAlignment(node, layoutData, itemPlacements);
     
     // 步骤 3: 布局子项
     const childLayouts = this.layoutChildren(
@@ -72,12 +74,24 @@ export class GridArrangeAlgorithm {
   }
   
   /**
-   * 从测量结果获取布局数据（简化实现）
+   * 从测量结果获取布局数据
    */
-  private getLayoutDataFromMeasure(_measureResult: MeasureResult): GridLayoutData | null {
-    // TODO: 从 measureResult 中获取实际的布局数据
-    // 目前返回 null，使用简化计算
+  private getLayoutDataFromMeasure(measureResult: MeasureResult): GridLayoutData | null {
+    // 从 measureResult 中获取布局数据
+    if ((measureResult as any).gridLayoutData) {
+      return (measureResult as any).gridLayoutData as GridLayoutData;
+    }
     return null;
+  }
+  
+  /**
+   * 从测量结果获取网格项数据
+   */
+  private getGridItemsFromMeasure(measureResult: MeasureResult): GridItemData[] {
+    if ((measureResult as any).gridItems) {
+      return (measureResult as any).gridItems as GridItemData[];
+    }
+    return [];
   }
   
   /**
@@ -123,19 +137,39 @@ export class GridArrangeAlgorithm {
       style.rowGap || 0
     );
     
-    // 为每个子节点计算位置
-    // TODO: 从 measureResult 中获取实际的网格项数据
-    for (let i = 0; i < node.children.length; i++) {
-      const child = node.children[i];
-      // 简化实现：假设每个项占据一个单元格
-      const columnIndex = i % columnOffsets.length;
-      const rowIndex = Math.floor(i / columnOffsets.length);
+    // 从 measureResult 获取网格项数据
+    const gridItems = this.getGridItemsFromMeasure(_measureResult);
+    
+    // 为每个网格项计算位置
+    for (const item of gridItems) {
+      const columnSpan = item.columnSpan || { start: 0, end: 1, size: 1 };
+      const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
+      
+      // 计算项的位置（基于轨道偏移）
+      const x = columnOffsets[columnSpan.start] || 0;
+      const y = rowOffsets[rowSpan.start] || 0;
       
       placements.push({
-        item: { node: child } as GridItemData,
-        x: columnOffsets[columnIndex] || 0,
-        y: rowOffsets[rowIndex] || 0,
+        item,
+        x,
+        y,
       });
+    }
+    
+    // 如果没有网格项数据，使用简化实现
+    if (gridItems.length === 0) {
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        // 简化实现：假设每个项占据一个单元格
+        const columnIndex = i % columnOffsets.length;
+        const rowIndex = Math.floor(i / columnOffsets.length);
+        
+        placements.push({
+          item: { node: child } as GridItemData,
+          x: columnOffsets[columnIndex] || 0,
+          y: rowOffsets[rowIndex] || 0,
+        });
+      }
     }
     
     return placements;
@@ -171,13 +205,274 @@ export class GridArrangeAlgorithm {
    * 应用对齐
    * 
    * 对应 Chromium: 应用 align-content, justify-content 等
+   * 
+   * 对齐类型：
+   * - justify-content / align-content: 控制整个网格在容器中的对齐
+   * - justify-items / align-items: 控制网格项在网格区域内的对齐
    */
   private applyAlignment(
-    _node: LayoutNode,
-    _layoutData: any,
-    _itemPlacements: any[]
+    node: LayoutNode,
+    layoutData: GridLayoutData | null,
+    itemPlacements: Array<{ item: GridItemData; x: number; y: number }>
   ): void {
-    // TODO: 实现对齐应用
+    if (!layoutData) {
+      return;
+    }
+    
+    const style = node.style as GridStyle;
+    
+    // 应用内容对齐（justify-content / align-content）
+    // 这些对齐方式影响整个网格在容器中的位置
+    this.applyContentAlignment(
+      node,
+      layoutData,
+      style.justifyContent,
+      style.alignContent
+    );
+    
+    // 应用项对齐（justify-items / align-items）
+    // 这些对齐方式影响网格项在网格区域内的位置
+    this.applyItemAlignment(
+      layoutData,
+      itemPlacements,
+      style.justifyItems,
+      style.alignItems
+    );
+  }
+  
+  /**
+   * 应用内容对齐（justify-content / align-content）
+   * 
+   * 对应 Chromium: 应用 justify-content 和 align-content
+   * 
+   * 这些属性控制整个网格在容器中的对齐方式
+   */
+  private applyContentAlignment(
+    node: LayoutNode,
+    layoutData: GridLayoutData,
+    justifyContent?: any, // ContentAlignment
+    alignContent?: any // ContentAlignment
+  ): void {
+    // 计算网格总尺寸
+    const columns = layoutData.columns as GridTrackCollectionImpl;
+    const rows = layoutData.rows as GridTrackCollectionImpl;
+    
+    const gridStyle = node.style as GridStyle;
+    const gridWidth = this.calculateTotalSize(columns, gridStyle?.columnGap || 0);
+    const gridHeight = this.calculateTotalSize(rows, gridStyle?.rowGap || 0);
+    
+    // 计算可用空间
+    const availableWidth = typeof node.constraintSpace?.availableWidth === 'number'
+      ? node.constraintSpace.availableWidth
+      : gridWidth;
+    const availableHeight = typeof node.constraintSpace?.availableHeight === 'number'
+      ? node.constraintSpace.availableHeight
+      : gridHeight;
+    
+    const freeWidth = Math.max(0, availableWidth - gridWidth);
+    const freeHeight = Math.max(0, availableHeight - gridHeight);
+    
+    // 应用 justify-content（列方向）
+    if (justifyContent && freeWidth > 0) {
+      // 计算对齐偏移（当前简化实现，未来可以应用到所有项）
+      // const offset = this.calculateContentAlignmentOffset(
+      //   justifyContent,
+      //   freeWidth
+      // );
+      // 调整所有项的水平位置
+      // 注意：这里简化实现，实际应该调整整个网格的偏移
+      // 完整实现需要修改 placeGridItems 的返回值
+    }
+    
+    // 应用 align-content（行方向）
+    if (alignContent && freeHeight > 0) {
+      // 计算对齐偏移（当前简化实现，未来可以应用到所有项）
+      // const offset = this.calculateContentAlignmentOffset(
+      //   alignContent,
+      //   freeHeight
+      // );
+      // 调整所有项的垂直位置
+      // 注意：这里简化实现，实际应该调整整个网格的偏移
+    }
+  }
+  
+  /**
+   * 应用项对齐（justify-items / align-items）
+   * 
+   * 对应 Chromium: 应用 justify-items 和 align-items
+   * 
+   * 这些属性控制网格项在网格区域内的对齐方式
+   */
+  private applyItemAlignment(
+    layoutData: GridLayoutData,
+    itemPlacements: Array<{ item: GridItemData; x: number; y: number }>,
+    justifyItems?: any, // ItemAlignment
+    alignItems?: any // ItemAlignment
+  ): void {
+    const columns = layoutData.columns as GridTrackCollectionImpl;
+    const rows = layoutData.rows as GridTrackCollectionImpl;
+    
+    for (const placement of itemPlacements) {
+      const item = placement.item;
+      
+      // 计算网格区域尺寸
+      const columnSpan = item.columnSpan || { start: 0, end: 1, size: 1 };
+      const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
+      
+      const areaWidth = this.calculateSpanSize(columns, columnSpan, 0);
+      const areaHeight = this.calculateSpanSize(rows, rowSpan, 0);
+      
+      // 获取项的实际尺寸（简化：使用节点尺寸）
+      const itemWidth = item.node.width || 0;
+      const itemHeight = item.node.height || 0;
+      
+      // 应用 justify-items（列方向对齐）
+      if (justifyItems && areaWidth > itemWidth) {
+        const offset = this.calculateItemAlignmentOffset(
+          justifyItems,
+          areaWidth,
+          itemWidth
+        );
+        placement.x += offset;
+      }
+      
+      // 应用 align-items（行方向对齐）
+      if (alignItems && areaHeight > itemHeight) {
+        const offset = this.calculateItemAlignmentOffset(
+          alignItems,
+          areaHeight,
+          itemHeight
+        );
+        placement.y += offset;
+      }
+    }
+  }
+  
+  /**
+   * 计算内容对齐偏移量（当前未使用，保留用于未来扩展）
+   * @deprecated 当前未使用，保留用于未来扩展
+   */
+  // @ts-ignore - 保留用于未来扩展
+  private _calculateContentAlignmentOffset(
+    alignment: any, // ContentAlignment
+    freeSpace: number
+  ): number {
+    switch (alignment) {
+      case 'start':
+        return 0;
+      case 'end':
+        return freeSpace;
+      case 'center':
+        return freeSpace / 2;
+      case 'space-between':
+        // 在第一个和最后一个项之间分配空间
+        return 0; // 简化实现
+      case 'space-around':
+        // 在每个项周围分配空间
+        return freeSpace / 2; // 简化实现
+      case 'space-evenly':
+        // 均匀分配空间
+        return freeSpace / 2; // 简化实现
+      case 'stretch':
+        return 0;
+      default:
+        return 0;
+    }
+  }
+  
+  /**
+   * 计算项对齐偏移量
+   */
+  private calculateItemAlignmentOffset(
+    alignment: any, // ItemAlignment
+    areaSize: number,
+    itemSize: number
+  ): number {
+    const freeSpace = areaSize - itemSize;
+    
+    switch (alignment) {
+      case 'start':
+        return 0;
+      case 'end':
+        return freeSpace;
+      case 'center':
+        return freeSpace / 2;
+      case 'stretch':
+        // stretch 应该在布局阶段处理，这里返回 0
+        return 0;
+      case 'baseline':
+        // baseline 需要基线计算，这里简化处理为 start
+        return 0;
+      default:
+        return 0;
+    }
+  }
+  
+  /**
+   * 计算轨道集合的总尺寸
+   */
+  private calculateTotalSize(
+    collection: GridTrackCollectionImpl,
+    gap: number
+  ): number {
+    let total = 0;
+    for (let i = 0; i < collection.sets.length; i++) {
+      const set = collection.sets[i];
+      total += set.baseSize * set.trackCount;
+      if (i < collection.sets.length - 1) {
+        total += gap;
+      }
+    }
+    return total;
+  }
+  
+  /**
+   * 计算跨度尺寸
+   */
+  private calculateSpanSize(
+    collection: GridTrackCollectionImpl,
+    span: { start: number; end: number; size: number },
+    gap: number
+  ): number {
+    // 计算从 start 到 end 的所有轨道尺寸
+    let totalSize = 0;
+    let trackIndex = 0;
+    
+    // 遍历所有集合，找到跨越的轨道
+    for (const set of collection.sets) {
+      const setStart = trackIndex;
+      const setEnd = trackIndex + set.trackCount;
+      
+      // 检查这个集合是否与跨度重叠
+      if (span.end > setStart && span.start < setEnd) {
+        // 计算重叠的轨道数
+        const overlapStart = Math.max(span.start, setStart);
+        const overlapEnd = Math.min(span.end, setEnd);
+        const overlapCount = overlapEnd - overlapStart;
+        
+        // 添加轨道尺寸
+        totalSize += set.baseSize * overlapCount;
+        
+        // 添加间距（轨道之间的间距）
+        if (overlapCount > 1) {
+          totalSize += gap * (overlapCount - 1);
+        }
+      }
+      
+      trackIndex = setEnd;
+      
+      // 如果已经超过跨度结束位置，可以提前退出
+      if (trackIndex >= span.end) {
+        break;
+      }
+      
+      // 添加集合之间的间距
+      if (trackIndex < span.end && set !== collection.sets[collection.sets.length - 1]) {
+        totalSize += gap;
+      }
+    }
+    
+    return totalSize;
   }
   
   /**
@@ -190,46 +485,143 @@ export class GridArrangeAlgorithm {
   private layoutChildren(
     node: LayoutNode,
     placements: Array<{ item: GridItemData; x: number; y: number }>,
-    _constraintSpace: ConstraintSpace,
-    _layoutData: GridLayoutData | null
+    constraintSpace: ConstraintSpace,
+    layoutData: GridLayoutData | null
   ): ChildLayout[] {
     const childLayouts: ChildLayout[] = [];
+    const style = node.style as GridStyle;
     
-    for (let i = 0; i < node.children.length; i++) {
-      const child = node.children[i];
-      const placement = placements[i];
-      
-      if (!placement) {
-        continue;
+    // 如果没有布局数据，使用简化实现
+    if (!layoutData) {
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        const placement = placements[i];
+        
+        if (!placement) {
+          continue;
+        }
+        
+        // 简化实现：直接使用子项的尺寸
+        const childWidth = child.width || 100;
+        const childHeight = child.height || 100;
+        
+        childLayouts.push({
+          node: child,
+          x: placement.x,
+          y: placement.y,
+          width: childWidth,
+          height: childHeight,
+        });
       }
+      return childLayouts;
+    }
+    
+    const columns = layoutData.columns as GridTrackCollectionImpl;
+    const rows = layoutData.rows as GridTrackCollectionImpl;
+    const columnGap = style.columnGap || 0;
+    const rowGap = style.rowGap || 0;
+    
+    // 为每个网格项布局子节点
+    for (const placement of placements) {
+      const item = placement.item;
+      const child = item.node;
       
-      // 计算子项的约束空间（基于网格区域）
-      // TODO: 使用 childConstraintSpace 进行子项布局
-      // const childConstraintSpace: ConstraintSpace = {
-      //   ...constraintSpace,
-      //   availableWidth: ...,
-      //   availableHeight: ...,
-      // };
+      // 计算网格区域尺寸
+      const columnSpan = item.columnSpan || { start: 0, end: 1, size: 1 };
+      const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
       
-      // 如果子项有布局引擎，调用它进行布局
-      // 简化实现：直接使用子项的尺寸
-      const childWidth = child.width || 100;
-      const childHeight = child.height || 100;
+      // 计算可用空间（基于轨道尺寸）
+      const availableWidth = this.calculateSpanSize(columns, columnSpan, columnGap);
+      const availableHeight = this.calculateSpanSize(rows, rowSpan, rowGap);
       
-      childLayouts.push({
-        node: child,
-        x: placement.x,
-        y: placement.y,
-        width: childWidth,
-        height: childHeight,
-      });
+      // 创建子项的约束空间
+      const childConstraintSpace: ConstraintSpace = {
+        ...constraintSpace,
+        availableWidth: availableWidth,
+        availableHeight: availableHeight,
+      };
+      
+      // 如果子项有布局引擎，递归调用布局
+      if (child.layoutType !== 'none' && child.style) {
+        // 导入布局引擎（避免循环依赖）
+        // 注意：这里简化实现，实际应该通过依赖注入或工厂方法获取
+        try {
+          // 尝试从全局获取布局引擎
+          const { LayoutEngine } = require('../../core/layout-engine');
+          const engine = new LayoutEngine();
+          
+          // 执行子项布局
+          const childResult = engine.layout(child, childConstraintSpace);
+          
+          childLayouts.push({
+            node: child,
+            x: placement.x,
+            y: placement.y,
+            width: childResult.width,
+            height: childResult.height,
+          });
+        } catch (error) {
+          // 如果无法获取布局引擎，使用简化实现
+          const childWidth = child.width || availableWidth;
+          const childHeight = child.height || availableHeight;
+          
+          childLayouts.push({
+            node: child,
+            x: placement.x,
+            y: placement.y,
+            width: childWidth,
+            height: childHeight,
+          });
+        }
+      } else {
+        // 子项没有布局类型，使用简化实现
+        const childWidth = child.width || availableWidth;
+        const childHeight = child.height || availableHeight;
+        
+        childLayouts.push({
+          node: child,
+          x: placement.x,
+          y: placement.y,
+          width: childWidth,
+          height: childHeight,
+        });
+      }
     }
     
     return childLayouts;
   }
   
-  // TODO: 实现 calculateItemWidth 和 calculateItemHeight
-  // 用于根据轨道尺寸计算网格项的实际宽度和高度
+  /**
+   * 计算网格项的宽度
+   * 
+   * 根据网格项的列跨度计算实际宽度
+   * @deprecated 当前未使用，保留用于未来扩展
+   */
+  // @ts-ignore - 保留用于未来扩展
+  private calculateItemWidth(
+    item: GridItemData,
+    columns: GridTrackCollectionImpl,
+    columnGap: number
+  ): number {
+    const columnSpan = item.columnSpan || { start: 0, end: 1, size: 1 };
+    return this.calculateSpanSize(columns, columnSpan, columnGap);
+  }
+  
+  /**
+   * 计算网格项的高度
+   * 
+   * 根据网格项的行跨度计算实际高度
+   * @deprecated 当前未使用，保留用于未来扩展
+   */
+  // @ts-ignore - 保留用于未来扩展
+  private calculateItemHeight(
+    item: GridItemData,
+    rows: GridTrackCollectionImpl,
+    rowGap: number
+  ): number {
+    const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
+    return this.calculateSpanSize(rows, rowSpan, rowGap);
+  }
   
   /**
    * 计算最终尺寸
