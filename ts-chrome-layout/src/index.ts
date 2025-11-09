@@ -66,6 +66,10 @@ export { TransformCalculator } from './transforms/transform-calculator';
 // 工具
 export { createConstraintSpace } from './utils/common/constraint-space-factory';
 export { createGridNode } from './utils/layouts/grid/grid-node-factory';
+export { createFlexNode } from './utils/layouts/flex/flex-node-factory';
+export { createBlockNode } from './utils/layouts/block/block-node-factory';
+export { createInlineNode } from './utils/layouts/inline/inline-node-factory';
+export { createTableNode } from './utils/layouts/table/table-node-factory';
 
 // 默认引擎
 export { createDefaultEngine } from './utils/common/default-engine';
