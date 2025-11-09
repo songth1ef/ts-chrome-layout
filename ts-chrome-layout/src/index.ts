@@ -29,6 +29,35 @@ export * from './types/layouts/grid/grid-style';
 export * from './types/layouts/grid/grid-data';
 export * from './types/layouts/grid/grid-position';
 
+// Flex 布局
+export { FlexLayoutAlgorithm } from './layouts/flex/flex-layout-algorithm';
+export { FlexMeasureAlgorithm } from './layouts/flex/flex-measure';
+export { FlexArrangeAlgorithm } from './layouts/flex/flex-arrange';
+export * from './types/layouts/flex/flex-style';
+export * from './types/layouts/flex/flex-data';
+export * from './types/layouts/flex/flex-item-style';
+
+// Block 布局
+export { BlockLayoutAlgorithm } from './layouts/block/block-layout-algorithm';
+export { BlockMeasureAlgorithm } from './layouts/block/block-measure';
+export { BlockArrangeAlgorithm } from './layouts/block/block-arrange';
+export * from './types/layouts/block/block-style';
+export * from './types/layouts/block/block-data';
+
+// Inline 布局
+export { InlineLayoutAlgorithm } from './layouts/inline/inline-layout-algorithm';
+export { InlineMeasureAlgorithm } from './layouts/inline/inline-measure';
+export { InlineArrangeAlgorithm } from './layouts/inline/inline-arrange';
+export * from './types/layouts/inline/inline-style';
+export * from './types/layouts/inline/inline-data';
+
+// Table 布局
+export { TableLayoutAlgorithm } from './layouts/table/table-layout-algorithm';
+export { TableMeasureAlgorithm } from './layouts/table/table-measure';
+export { TableArrangeAlgorithm } from './layouts/table/table-arrange';
+export * from './types/layouts/table/table-style';
+export * from './types/layouts/table/table-data';
+
 // Transform
 export { AffineTransform } from './transforms/affine-transform';
 export { TransformMatrix } from './transforms/transform-matrix';

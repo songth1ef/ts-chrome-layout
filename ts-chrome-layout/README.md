@@ -22,12 +22,31 @@ TypeScript 实现的 Chromium 布局计算系统 - 完整的布局引擎重构
   - 矩阵变换与透视变换
   - 点、矩形、路径变换计算
 
-### ⏳ 计划实现
+### ✅ 已实现
 
-- Flexbox Layout - CSS Flexbox 布局
-- Block Layout - 块级布局
-- Inline Layout - 行内布局
-- Table Layout - 表格布局
+- **Flexbox Layout** - CSS Flexbox 布局算法
+  - 主轴和交叉轴尺寸计算
+  - flex-grow / flex-shrink 处理
+  - justify-content / align-items 对齐
+  - 换行支持（基础）
+
+- **Block Layout** - 块级布局算法
+  - 垂直堆叠布局
+  - 浮动（float）支持
+  - 清除浮动（clear）处理
+  - 边距和填充计算
+
+- **Inline Layout** - 行内布局算法
+  - 文本分行（line breaking）
+  - 行高计算
+  - 文本对齐（text-align）
+  - 基线对齐（基础）
+
+- **Table Layout** - 表格布局算法
+  - 表格结构构建
+  - 列宽计算（auto / fixed）
+  - 行高计算
+  - 单元格跨行/跨列支持
 
 ## 快速开始
 
