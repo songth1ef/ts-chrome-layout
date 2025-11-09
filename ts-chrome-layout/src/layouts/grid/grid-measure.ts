@@ -42,6 +42,21 @@ export class GridMeasureAlgorithm {
     node: LayoutNode,
     constraintSpace: ConstraintSpace
   ): MeasureResult {
+    return this.measureWithConstraint(node, constraintSpace, SizingConstraint.Layout);
+  }
+  
+  /**
+   * 使用指定约束进行测量
+   * 
+   * 对应 Chromium: GridLayoutAlgorithm::ComputeMinMaxSizes()
+   * 
+   * @param constraint - 尺寸约束（Layout、MinContent、MaxContent）
+   */
+  measureWithConstraint(
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace,
+    constraint: SizingConstraint
+  ): MeasureResult {
     // 步骤 1: 检查是否有继承的 GridLayoutTree（子网格情况）
     // 对应 Chromium: constraint_space.GetGridLayoutSubtree()
     if (constraintSpace.gridLayoutTree) {
@@ -66,14 +81,14 @@ export class GridMeasureAlgorithm {
     this.completeTrackSizingAlgorithm(
       sizingTree,
       GridTrackDirection.Column,
-      SizingConstraint.Layout,
+      constraint,
       needsAdditionalPass,
       constraintSpace
     );
     this.completeTrackSizingAlgorithm(
       sizingTree,
       GridTrackDirection.Row,
-      SizingConstraint.Layout,
+      constraint,
       needsAdditionalPass,
       constraintSpace
     );

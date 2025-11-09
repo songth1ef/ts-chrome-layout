@@ -589,8 +589,37 @@ export class GridArrangeAlgorithm {
     return childLayouts;
   }
   
-  // TODO: 实现 calculateItemWidth 和 calculateItemHeight
-  // 用于根据轨道尺寸计算网格项的实际宽度和高度
+  /**
+   * 计算网格项的宽度
+   * 
+   * 根据网格项的列跨度计算实际宽度
+   * @deprecated 当前未使用，保留用于未来扩展
+   */
+  // @ts-ignore - 保留用于未来扩展
+  private calculateItemWidth(
+    item: GridItemData,
+    columns: GridTrackCollectionImpl,
+    columnGap: number
+  ): number {
+    const columnSpan = item.columnSpan || { start: 0, end: 1, size: 1 };
+    return this.calculateSpanSize(columns, columnSpan, columnGap);
+  }
+  
+  /**
+   * 计算网格项的高度
+   * 
+   * 根据网格项的行跨度计算实际高度
+   * @deprecated 当前未使用，保留用于未来扩展
+   */
+  // @ts-ignore - 保留用于未来扩展
+  private calculateItemHeight(
+    item: GridItemData,
+    rows: GridTrackCollectionImpl,
+    rowGap: number
+  ): number {
+    const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
+    return this.calculateSpanSize(rows, rowSpan, rowGap);
+  }
   
   /**
    * 计算最终尺寸
