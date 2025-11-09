@@ -36,9 +36,11 @@ export class GridArrangeAlgorithm {
       throw new Error('Node must have grid style');
     }
     
-    // 从 measureResult 获取布局数据（简化实现：从缓存中获取）
-    // TODO: 从 measureResult 中获取实际的布局数据
+    // 从 measureResult 获取布局数据
     const layoutData = this.getLayoutDataFromMeasure(measureResult);
+    if (!layoutData) {
+      throw new Error('Grid layout data not found in measure result');
+    }
     
     // 步骤 1: 计算网格项位置和偏移
     const itemPlacements = this.placeGridItems(

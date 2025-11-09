@@ -226,7 +226,8 @@ export class FlexArrangeAlgorithm {
         case ItemAlignment.Stretch:
           // stretch: 拉伸到容器高度
           placement.crossOffset = 0;
-          // TODO: 设置项的高度
+          // 设置项的高度为容器高度
+          placement.item.crossSize = totalCrossSize;
           break;
         case ItemAlignment.Baseline:
           // baseline: 简化实现为 start
