@@ -152,17 +152,226 @@ export class GridMeasureAlgorithm {
    * 测量子网格
    * 
    * 对应 Chromium: GridLayoutAlgorithm::LayoutInternal() 中的子网格分支
+   * 
+   * 子网格从父网格继承 GridLayoutTree，使用父网格的轨道定义
    */
   private measureSubgrid(
-    _node: LayoutNode,
-    _constraintSpace: ConstraintSpace
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace
   ): MeasureResult {
-    // TODO: 实现子网格测量
-    // 对应 Chromium: 直接使用继承的 GridLayoutTree
-    return {
-      width: 0,
-      height: 0,
+    // 从约束空间获取继承的 GridLayoutTree
+    const parentLayoutTree = constraintSpace.gridLayoutTree;
+    if (!parentLayoutTree) {
+      throw new Error('Subgrid measurement requires gridLayoutTree in constraintSpace');
+    }
+    
+    const style = node.style as GridStyle;
+    if (!style || style.layoutType !== 'grid') {
+      throw new Error('Subgrid node must have grid style');
+    }
+    
+    // 检查子网格继承的方向
+    // 子网格的 gridTemplateColumns 或 gridTemplateRows 应该是 'subgrid' 字符串
+    // 或者是一个特殊的对象类型
+    const hasSubgriddedColumns = 
+      (typeof style.gridTemplateColumns === 'string' && style.gridTemplateColumns === 'subgrid') ||
+      (Array.isArray(style.gridTemplateColumns) && style.gridTemplateColumns.length === 0) ||
+      (style.gridTemplateColumns as any)?.type === 'subgrid';
+    const hasSubgriddedRows = 
+      (typeof style.gridTemplateRows === 'string' && style.gridTemplateRows === 'subgrid') ||
+      (Array.isArray(style.gridTemplateRows) && style.gridTemplateRows.length === 0) ||
+      (style.gridTemplateRows as any)?.type === 'subgrid';
+    
+    // 从父布局树获取布局数据
+    const parentLayoutData = parentLayoutTree.getNode(0).layoutData;
+    
+    // 创建子网格的布局数据
+    // 如果列方向是子网格，使用父网格的列；否则创建新的列轨道集合
+    const columns = hasSubgriddedColumns
+      ? parentLayoutData.columns
+      : this.buildTrackCollectionFromStyle(
+          style.gridTemplateColumns || [],
+          GridTrackDirection.Column,
+          constraintSpace
+        );
+    
+    // 如果行方向是子网格，使用父网格的行；否则创建新的行轨道集合
+    const rows = hasSubgriddedRows
+      ? parentLayoutData.rows
+      : this.buildTrackCollectionFromStyle(
+          style.gridTemplateRows || [],
+          GridTrackDirection.Row,
+          constraintSpace
+        );
+    
+    // 创建子网格的布局数据
+    const layoutData: GridLayoutData = {
+      columns,
+      rows,
     };
+    
+    // 构建子网格的网格项（从子节点）
+    const gridItemsCollection = this.constructGridItems(node, this.createLineResolver(node, constraintSpace));
+    const gridItems = gridItemsCollection.getAll();
+    
+    // 初始化轨道尺寸（只初始化非子网格方向的轨道）
+    if (!hasSubgriddedColumns) {
+      this.initializeTrackSizesForCollection(columns as GridTrackCollectionImpl);
+    }
+    if (!hasSubgriddedRows) {
+      this.initializeTrackSizesForCollection(rows as GridTrackCollectionImpl);
+    }
+    
+    // 完成轨道尺寸算法（只对非子网格方向）
+    let needsAdditionalPass = false;
+    const sizingTree = this.createSizingTreeForSubgrid(layoutData, gridItems, constraintSpace);
+    if (!hasSubgriddedColumns) {
+      this.completeTrackSizingAlgorithm(
+        sizingTree,
+        GridTrackDirection.Column,
+        SizingConstraint.Layout,
+        needsAdditionalPass,
+        constraintSpace
+      );
+    }
+    if (!hasSubgriddedRows) {
+      this.completeTrackSizingAlgorithm(
+        sizingTree,
+        GridTrackDirection.Row,
+        SizingConstraint.Layout,
+        needsAdditionalPass,
+        constraintSpace
+      );
+    }
+    
+    // 计算总尺寸
+    const totalWidth = this.calculateTotalSize(columns as GridTrackCollectionImpl);
+    const intrinsicBlockSize = this.calculateIntrinsicBlockSize(gridItems, layoutData);
+    
+    return {
+      width: totalWidth,
+      height: intrinsicBlockSize,
+      gridLayoutData: layoutData,
+      gridItems,
+    };
+  }
+  
+  /**
+   * 为子网格创建简化的 Sizing Tree
+   */
+  private createSizingTreeForSubgrid(
+    layoutData: GridLayoutData,
+    gridItems: GridItemData[],
+    constraintSpace: ConstraintSpace
+  ): GridSizingTreeImpl {
+    const sizingTree = new GridSizingTreeImpl();
+    sizingTree.addNode({
+      gridItems,
+      layoutData,
+      subtreeSize: 1,
+      writingMode: constraintSpace.writingMode || WritingMode.HorizontalTb,
+    });
+    return sizingTree;
+  }
+  
+  /**
+   * 初始化单个轨道集合的尺寸
+   */
+  private initializeTrackSizesForCollection(collection: GridTrackCollectionImpl): void {
+    for (const set of collection.sets) {
+      const sizingFunction = set.sizingFunction;
+      
+      if (sizingFunction.type === 'fixed') {
+        set.baseSize = sizingFunction.value;
+        set.growthLimit = sizingFunction.value;
+      } else if (sizingFunction.type === 'fr') {
+        set.baseSize = 0;
+        set.growthLimit = Infinity;
+      } else {
+        set.baseSize = 0;
+        set.growthLimit = Infinity;
+      }
+    }
+  }
+  
+  /**
+   * 从样式构建轨道集合（用于非子网格方向）
+   */
+  private buildTrackCollectionFromStyle(
+    tracks: any[],
+    direction: GridTrackDirection,
+    _constraintSpace: ConstraintSpace
+  ): GridTrackCollectionImpl {
+    const collection = new GridTrackCollectionImpl(direction);
+    
+    // 简化实现：为每个轨道创建一个集合
+    for (const track of tracks) {
+      if (track.type === 'repeat') {
+        const count = typeof track.count === 'number' ? track.count : 1;
+        for (let i = 0; i < count; i++) {
+          for (const subTrack of track.tracks) {
+            collection.sets.push({
+              baseSize: 0,
+              growthLimit: Infinity,
+              trackCount: 1,
+              sizingFunction: subTrack,
+            });
+          }
+        }
+      } else {
+        collection.sets.push({
+          baseSize: 0,
+          growthLimit: Infinity,
+          trackCount: 1,
+          sizingFunction: track,
+        });
+      }
+    }
+    
+    return collection;
+  }
+  
+  /**
+   * 创建线解析器（用于子网格）
+   */
+  private createLineResolver(
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace
+  ): GridLineResolver {
+    const style = node.style as GridStyle;
+    return new GridLineResolver(
+      style,
+      this.calculateAutoRepetitions(style.gridTemplateColumns, constraintSpace),
+      this.calculateAutoRepetitions(style.gridTemplateRows, constraintSpace)
+    );
+  }
+  
+  /**
+   * 计算自动重复次数（用于子网格）
+   * 
+   * 对应 Chromium: GridLineResolver::ComputeAutoRepetitions()
+   * 
+   * 计算 auto-fill 或 auto-fit 的重复次数
+   */
+  private calculateAutoRepetitions(
+    tracks: any[],
+    constraintSpace: ConstraintSpace
+  ): number {
+    // 查找 auto-fill 或 auto-fit
+    for (const track of tracks) {
+      if (track.type === 'repeat' && (track.count === 'auto-fill' || track.count === 'auto-fit')) {
+        // 使用 computeAutoRepetitions 方法计算
+        // 需要确定是列还是行方向（简化：假设是列方向）
+        const availableSize = typeof constraintSpace.availableWidth === 'number'
+          ? constraintSpace.availableWidth
+          : typeof constraintSpace.availableHeight === 'number'
+          ? constraintSpace.availableHeight
+          : 0;
+        
+        return this.computeAutoRepetitions([track], availableSize);
+      }
+    }
+    return 1;
   }
   
   /**
@@ -247,7 +456,7 @@ export class GridMeasureAlgorithm {
       gridItems: gridItems.getAll(),
       layoutData,
       subtreeSize: 1,
-      writingMode: WritingMode.HorizontalTb, // TODO: 从样式获取
+      writingMode: constraintSpace.writingMode || WritingMode.HorizontalTb,
     });
     
     return sizingTree;
