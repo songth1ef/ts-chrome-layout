@@ -98,8 +98,16 @@ export class GridSizingTreeImpl implements GridSizingTree {
    * 对应 Chromium: GridSizingTree::FinalizeTree()
    * 
    * 将可变的 GridSizingTree 转换为不可变的 GridLayoutTree
+   * 
+   * TODO: 完整实现 GridLayoutTree
    */
   finalizeTree(): any {
+    // TODO: 完整实现 GridLayoutTree
+    // 当前简化实现：返回一个包含必要方法的对象
+    if (this.nodes.length === 0) {
+      return null;
+    }
+    
     // 创建 GridLayoutTree 节点数组
     const layoutNodes: any[] = [];
     
@@ -122,7 +130,7 @@ export class GridSizingTreeImpl implements GridSizingTree {
     }
     
     // 创建并返回 GridLayoutTree
-    return {
+    const layoutTree: any = {
       nodes: layoutNodes,
       getNode: (index: number) => {
         if (index >= layoutNodes.length) {
@@ -132,13 +140,13 @@ export class GridSizingTreeImpl implements GridSizingTree {
       },
       getSubtree: (rootIndex: number) => {
         return {
-          tree: this.finalizeTree(),
+          tree: layoutTree,
           rootIndex,
           getNode: () => layoutNodes[rootIndex],
           getLayoutData: () => layoutNodes[rootIndex].layoutData,
           firstChild: () => {
             if (rootIndex + 1 < layoutNodes.length) {
-              return this.finalizeTree().getSubtree(rootIndex + 1);
+              return layoutTree.getSubtree(rootIndex + 1);
             }
             return null;
           },
@@ -146,7 +154,7 @@ export class GridSizingTreeImpl implements GridSizingTree {
             const currentNode = layoutNodes[rootIndex];
             const nextIndex = rootIndex + currentNode.subtreeSize;
             if (nextIndex < layoutNodes.length) {
-              return this.finalizeTree().getSubtree(nextIndex);
+              return layoutTree.getSubtree(nextIndex);
             }
             return null;
           },
@@ -159,6 +167,8 @@ export class GridSizingTreeImpl implements GridSizingTree {
         return JSON.stringify(node1.layoutData) === JSON.stringify(node2.layoutData);
       },
     };
+    
+    return layoutTree;
   }
   
   /**
