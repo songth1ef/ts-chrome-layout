@@ -342,10 +342,35 @@ export class GridLineResolver {
    * 是否有独立轴
    * 
    * 对应 Chromium: GridLineResolver::HasStandaloneAxis()
+   * 
+   * 独立轴是指该轴不依赖于另一个轴的尺寸计算
+   * 例如：如果列轴是独立的，则列轨道的尺寸不依赖于行轨道的尺寸
    */
-  hasStandaloneAxis(_direction: GridTrackDirection): boolean {
-    // TODO: 实现独立轴检查
-    // 对应 Chromium: HasStandaloneAxis()
+  hasStandaloneAxis(direction: GridTrackDirection): boolean {
+    // 检查该方向的轨道定义是否包含子网格
+    // 如果包含子网格，则该轴不是独立的（依赖于父网格）
+    
+    const tracks =
+      direction === GridTrackDirection.Column
+        ? this.style.gridTemplateColumns
+        : this.style.gridTemplateRows;
+    
+    // 检查是否有子网格引用
+    for (const track of tracks) {
+      // 如果轨道定义是 'subgrid'，则该轴不是独立的
+      // 注意：这里简化实现，实际应该检查 track 是否为 subgrid 类型
+      if ((track as any)?.type === 'subgrid') {
+        return false;
+      }
+    }
+    
+    // 检查是否有命名区域（命名区域可能影响独立性）
+    // 简化实现：如果有命名区域，假设轴是独立的
+    if (this.style.gridTemplateAreas && this.style.gridTemplateAreas.length > 0) {
+      return true;
+    }
+    
+    // 默认情况下，轴是独立的
     return true;
   }
 }

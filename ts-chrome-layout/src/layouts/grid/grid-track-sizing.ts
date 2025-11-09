@@ -26,18 +26,18 @@ export type ContributionSizeFunction = (
  * 参考: https://drafts.csswg.org/css-grid-2/#algo-track-sizing
  */
 export class GridTrackSizingAlgorithm {
-  private containerStyle: any; // ComputedStyle
+  // private _containerStyle: any; // ComputedStyle (未使用，保留用于未来扩展)
   private availableSize: { width: number; height: number };
-  private sizingConstraint: SizingConstraint;
+  // private _sizingConstraint: SizingConstraint; // 未使用，保留用于未来扩展
   
   constructor(
-    containerStyle: any,
+    _containerStyle: any, // 未使用，保留用于未来扩展
     availableSize: { width: number; height: number },
-    sizingConstraint: SizingConstraint
+    _sizingConstraint: SizingConstraint // 未使用，保留用于未来扩展
   ) {
-    this.containerStyle = containerStyle;
+    // this._containerStyle = containerStyle;
     this.availableSize = availableSize;
-    this.sizingConstraint = sizingConstraint;
+    // this._sizingConstraint = sizingConstraint;
   }
   
   /**
@@ -102,14 +102,135 @@ export class GridTrackSizingAlgorithm {
    * 解析内在尺寸轨道（步骤 2）
    * 
    * 对应 Chromium: GridTrackSizingAlgorithm::ResolveIntrinsicTrackSizes()
+   * 
+   * 内在尺寸轨道包括：
+   * - min-content: 最小内容尺寸
+   * - max-content: 最大内容尺寸
+   * - auto: 自动尺寸（可能是 min-content 或 max-content）
    */
   private resolveIntrinsicTrackSizes(
-    _contributionSize: ContributionSizeFunction,
-    _trackCollection: GridTrackCollection,
-    _gridItems: GridItemData[]
+    contributionSize: ContributionSizeFunction,
+    trackCollection: GridTrackCollection,
+    gridItems: GridItemData[]
   ): void {
-    // TODO: 实现内在尺寸解析
-    // 对应 Chromium: ResolveIntrinsicTrackSizes()
+    // 遍历所有轨道集合
+    for (let setIndex = 0; setIndex < trackCollection.sets.length; setIndex++) {
+      const set = trackCollection.sets[setIndex];
+      const sizingFunction = set.sizingFunction;
+      
+      // 检查是否是内在尺寸轨道
+      if (
+        sizingFunction.type === 'min-content' ||
+        sizingFunction.type === 'max-content' ||
+        sizingFunction.type === 'auto' ||
+        (sizingFunction.type === 'minmax' &&
+          (sizingFunction.min.type === 'min-content' ||
+            sizingFunction.min.type === 'max-content' ||
+            sizingFunction.min.type === 'auto' ||
+            sizingFunction.max.type === 'min-content' ||
+            sizingFunction.max.type === 'max-content' ||
+            sizingFunction.max.type === 'auto'))
+      ) {
+        // 找到跨越这个集合的所有网格项
+        const itemsSpanningSet = this.findItemsSpanningSet(
+          gridItems,
+          setIndex,
+          trackCollection.direction
+        );
+        
+        if (itemsSpanningSet.length === 0) {
+          // 如果没有项跨越这个集合，使用默认尺寸
+          if (sizingFunction.type === 'min-content' || sizingFunction.type === 'auto') {
+            set.baseSize = 0;
+          } else if (sizingFunction.type === 'max-content') {
+            set.baseSize = 0; // 简化实现
+          }
+          continue;
+        }
+        
+        // 计算内在尺寸
+        let intrinsicSize = 0;
+        
+        if (sizingFunction.type === 'min-content' || sizingFunction.type === 'auto') {
+          // min-content: 找到所有项的最小贡献
+          for (const item of itemsSpanningSet) {
+            const contribution = contributionSize(
+              GridItemContributionType.ForIntrinsicMinimums,
+              item
+            );
+            intrinsicSize = Math.max(intrinsicSize, contribution);
+          }
+        } else if (sizingFunction.type === 'max-content') {
+          // max-content: 找到所有项的最大贡献
+          for (const item of itemsSpanningSet) {
+            const contribution = contributionSize(
+              GridItemContributionType.ForMaxContentMinimums,
+              item
+            );
+            intrinsicSize = Math.max(intrinsicSize, contribution);
+          }
+        } else if (sizingFunction.type === 'minmax') {
+          // minmax: 分别计算最小和最大，然后取合适的值
+          let minSize = 0;
+          let maxSize = 0;
+          
+          for (const item of itemsSpanningSet) {
+            const minContribution = contributionSize(
+              GridItemContributionType.ForIntrinsicMinimums,
+              item
+            );
+            const maxContribution = contributionSize(
+              GridItemContributionType.ForMaxContentMinimums,
+              item
+            );
+            minSize = Math.max(minSize, minContribution);
+            maxSize = Math.max(maxSize, maxContribution);
+          }
+          
+          // 根据 minmax 的约束选择尺寸
+          // 简化实现：使用 min 和 max 的平均值
+          intrinsicSize = Math.max(minSize, Math.min(maxSize, this.availableSize.width));
+        }
+        
+        // 更新基础尺寸
+        set.baseSize = Math.max(set.baseSize, intrinsicSize);
+        
+        // 如果增长限制是无限的，也设置为内在尺寸
+        if (!isFinite(set.growthLimit)) {
+          set.growthLimit = set.baseSize;
+        }
+      }
+    }
+  }
+  
+  /**
+   * 找到跨越指定集合的所有网格项
+   */
+  private findItemsSpanningSet(
+    gridItems: GridItemData[],
+    setIndex: number,
+    direction: GridTrackDirection
+  ): GridItemData[] {
+    const items: GridItemData[] = [];
+    
+    for (const item of gridItems) {
+      const span = direction === GridTrackDirection.Column
+        ? item.columnSpan
+        : item.rowSpan;
+      
+      if (!span) {
+        continue;
+      }
+      
+      // 简化实现：检查项是否跨越这个集合
+      // 完整实现需要根据集合的轨道索引范围来判断
+      // 这里假设集合索引对应轨道索引
+      if (span.start <= setIndex && span.end > setIndex) {
+        items.push(item);
+      }
+    }
+    
+    return items;
   }
   
   /**

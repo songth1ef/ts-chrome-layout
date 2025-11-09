@@ -56,9 +56,9 @@ export class GridMeasureAlgorithm {
     // 对应 Chromium: InitializeTrackSizes()
     this.initializeTrackSizes(sizingTree);
     
-    // 步骤 4: 计算基线对齐（简化实现：跳过）
+    // 步骤 4: 计算基线对齐
     // 对应 Chromium: ComputeGridItemBaselines()
-    // this.computeGridItemBaselines(sizingTree);
+    this.computeGridItemBaselines(sizingTree);
     
     // 步骤 5: 完成轨道尺寸算法
     // 对应 Chromium: CompleteTrackSizingAlgorithm()
@@ -102,6 +102,10 @@ export class GridMeasureAlgorithm {
     return {
       width: totalWidth,
       height: totalHeight,
+      // 存储布局数据供 arrange 阶段使用
+      gridLayoutData: layoutData,
+      gridItems: sizingTree.getNode(0).gridItems,
+      sizingTree: sizingTree,
     };
   }
   
@@ -469,10 +473,78 @@ export class GridMeasureAlgorithm {
    * 计算网格项基线
    * 
    * 对应 Chromium: GridLayoutAlgorithm::ComputeGridItemBaselines()
+   * 
+   * 基线对齐用于 align-items: baseline 和 align-self: baseline
+   * 需要计算每个网格项的第一行基线位置
    */
-  private computeGridItemBaselines(_sizingTree: any): void {
-    // TODO: 实现基线计算
-    // 对应 Chromium: ComputeGridItemBaselines()
+  private computeGridItemBaselines(sizingTree: GridSizingTreeImpl): void {
+    const rootNode = sizingTree.getNode(0);
+    const gridItems = rootNode.gridItems;
+    
+    // 遍历所有网格项，计算基线
+    for (const item of gridItems) {
+      // 基线对齐只适用于行方向（align-items / align-self）
+      // 列方向使用 justify-items / justify-self
+      
+      // 检查项是否使用基线对齐
+      const rowAlignment = item.rowAlignment;
+      if (rowAlignment === ItemAlignment.Baseline) {
+        // 计算项的基线位置
+        // 简化实现：假设基线在项高度的某个位置（通常是第一行文本的基线）
+        // 完整实现需要：
+        // 1. 测量子项的第一行基线
+        // 2. 考虑项的 padding 和 border
+        // 3. 存储基线位置供后续对齐使用
+        
+        // 这里简化实现：假设基线在项高度的 80% 位置（模拟文本基线）
+        const itemHeight = item.node.height || 0;
+        const baselineOffset = itemHeight * 0.8;
+        
+        // 存储基线偏移（可以存储在 item 的额外属性中）
+        // 注意：这里简化实现，实际应该存储在 GridItemData 的基线属性中
+        (item as any).baselineOffset = baselineOffset;
+      }
+    }
+    
+    // 计算行轨道的基线对齐偏移
+    // 对于使用基线对齐的行，需要找到该行中所有项的基线，并计算对齐偏移
+    const layoutData = rootNode.layoutData;
+    const rows = layoutData.rows as GridTrackCollectionImpl;
+    
+    // 按行分组网格项
+    const itemsByRow = new Map<number, GridItemData[]>();
+    for (const item of gridItems) {
+      const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
+      const rowStart = rowSpan.start;
+      
+      if (!itemsByRow.has(rowStart)) {
+        itemsByRow.set(rowStart, []);
+      }
+      itemsByRow.get(rowStart)!.push(item);
+    }
+    
+    // 为每行计算基线对齐偏移
+    for (const [rowIndex, items] of itemsByRow.entries()) {
+      // 找到该行中所有使用基线对齐的项
+      const baselineItems = items.filter(
+        (item) => item.rowAlignment === ItemAlignment.Baseline
+      );
+      
+      if (baselineItems.length > 0) {
+        // 找到最大的基线偏移（用于对齐）
+        let maxBaselineOffset = 0;
+        for (const item of baselineItems) {
+          const baselineOffset = (item as any).baselineOffset || 0;
+          maxBaselineOffset = Math.max(maxBaselineOffset, baselineOffset);
+        }
+        
+        // 存储行的基线对齐偏移（可以存储在行的额外属性中）
+        // 注意：这里简化实现，实际应该存储在 GridSet 或 GridRange 的基线属性中
+        if (rows.sets[rowIndex]) {
+          (rows.sets[rowIndex] as any).baselineOffset = maxBaselineOffset;
+        }
+      }
+    }
   }
   
   /**

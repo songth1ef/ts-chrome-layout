@@ -12,11 +12,11 @@ import { isIndefiniteSpan } from '../../types/layouts/grid/grid-data';
  * 参考: https://drafts.csswg.org/css-grid/#auto-placement-algo
  */
 export class GridPlacementAlgorithm {
-  private style: GridStyle;
+  // private _style: GridStyle; // 保留用于未来扩展
   private lineResolver: GridLineResolver;
   
-  constructor(style: GridStyle, lineResolver: GridLineResolver) {
-    this.style = style;
+  constructor(_style: GridStyle, lineResolver: GridLineResolver) {
+    // this._style = style;
     this.lineResolver = lineResolver;
   }
   

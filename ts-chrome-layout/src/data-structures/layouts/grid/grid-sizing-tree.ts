@@ -57,10 +57,27 @@ export class GridSizingTreeImpl implements GridSizingTree {
    * 查找子网格索引
    * 
    * 对应 Chromium: GridSizingTree::LookupSubgridIndex()
+   * 
+   * 在树中查找指定节点对应的子网格索引
    */
-  lookupSubgridIndex(_node: any): number | null {
-    // TODO: 实现子网格索引查找
-    // 对应 Chromium: LookupSubgridIndex()
+  lookupSubgridIndex(node: any): number | null {
+    // 遍历所有节点，查找匹配的子网格节点
+    for (let i = 0; i < this.nodes.length; i++) {
+      const treeNode = this.nodes[i];
+      
+      // 检查这个节点的网格项中是否有匹配的子网格
+      for (const item of treeNode.gridItems) {
+        if (item.isSubgrid && item.node === node) {
+          // 找到匹配的子网格，返回其在树中的索引
+          // 子网格节点通常是当前节点的子节点
+          // 简化实现：返回下一个节点的索引
+          if (i + 1 < this.nodes.length) {
+            return i + 1;
+          }
+        }
+      }
+    }
+    
     return null;
   }
   
@@ -79,11 +96,86 @@ export class GridSizingTreeImpl implements GridSizingTree {
    * 最终化布局树
    * 
    * 对应 Chromium: GridSizingTree::FinalizeTree()
+   * 
+   * 将可变的 GridSizingTree 转换为不可变的 GridLayoutTree
    */
   finalizeTree(): any {
-    // TODO: 实现布局树最终化
-    // 对应 Chromium: FinalizeTree()
-    return null;
+    // 创建 GridLayoutTree 节点数组
+    const layoutNodes: any[] = [];
+    
+    // 遍历所有 sizing 节点，转换为 layout 节点
+    for (const sizingNode of this.nodes) {
+      // 创建不可变的布局节点
+      const layoutNode = {
+        // 布局数据（从 sizing 节点复制）
+        layoutData: {
+          columns: this.cloneTrackCollection(sizingNode.layoutData.columns),
+          rows: this.cloneTrackCollection(sizingNode.layoutData.rows),
+        },
+        // 子树大小（保持不变）
+        subtreeSize: sizingNode.subtreeSize,
+        // 是否有未解析的几何（简化实现：假设都已解析）
+        hasUnresolvedGeometry: false,
+      };
+      
+      layoutNodes.push(layoutNode);
+    }
+    
+    // 创建并返回 GridLayoutTree
+    return {
+      nodes: layoutNodes,
+      getNode: (index: number) => {
+        if (index >= layoutNodes.length) {
+          throw new Error(`Node index ${index} out of bounds`);
+        }
+        return layoutNodes[index];
+      },
+      getSubtree: (rootIndex: number) => {
+        return {
+          tree: this.finalizeTree(),
+          rootIndex,
+          getNode: () => layoutNodes[rootIndex],
+          getLayoutData: () => layoutNodes[rootIndex].layoutData,
+          firstChild: () => {
+            if (rootIndex + 1 < layoutNodes.length) {
+              return this.finalizeTree().getSubtree(rootIndex + 1);
+            }
+            return null;
+          },
+          nextSibling: () => {
+            const currentNode = layoutNodes[rootIndex];
+            const nextIndex = rootIndex + currentNode.subtreeSize;
+            if (nextIndex < layoutNodes.length) {
+              return this.finalizeTree().getSubtree(nextIndex);
+            }
+            return null;
+          },
+        };
+      },
+      areSubtreesEqual: (index1: number, tree2: any, index2: number) => {
+        // 简化实现：比较布局数据
+        const node1 = layoutNodes[index1];
+        const node2 = tree2.getNode(index2);
+        return JSON.stringify(node1.layoutData) === JSON.stringify(node2.layoutData);
+      },
+    };
+  }
+  
+  /**
+   * 克隆轨道集合（创建不可变副本）
+   */
+  private cloneTrackCollection(collection: any): any {
+    // 创建新的轨道集合，复制所有数据
+    return {
+      direction: collection.direction,
+      ranges: collection.ranges ? [...collection.ranges] : [],
+      sets: collection.sets ? collection.sets.map((set: any) => ({
+        baseSize: set.baseSize,
+        growthLimit: set.growthLimit,
+        trackCount: set.trackCount,
+        sizingFunction: set.sizingFunction,
+      })) : [],
+    };
   }
 }
 
