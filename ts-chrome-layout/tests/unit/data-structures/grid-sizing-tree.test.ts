@@ -146,9 +146,33 @@ describe('GridSizingTreeImpl', () => {
   });
 
   describe('finalizeTree', () => {
-    it('应该返回 null（待实现）', () => {
+    it('应该在空树时返回 null', () => {
       const result = tree.finalizeTree();
       expect(result).toBeNull();
+    });
+
+    it('应该返回 GridLayoutTree 对象', () => {
+      const node = createMockNode();
+      tree.addNode(node);
+      
+      const result = tree.finalizeTree();
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty('nodes');
+      expect(result).toHaveProperty('getNode');
+      expect(result).toHaveProperty('getSubtree');
+      expect(result.nodes.length).toBe(1);
+    });
+
+    it('应该正确转换节点', () => {
+      const node = createMockNode();
+      tree.addNode(node);
+      
+      const result = tree.finalizeTree();
+      expect(result).not.toBeNull();
+      const layoutNode = result.getNode(0);
+      expect(layoutNode).toHaveProperty('layoutData');
+      expect(layoutNode).toHaveProperty('subtreeSize');
+      expect(layoutNode).toHaveProperty('hasUnresolvedGeometry');
     });
   });
 });

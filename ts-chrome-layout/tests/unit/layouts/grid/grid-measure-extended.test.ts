@@ -134,10 +134,22 @@ describe('GridMeasureAlgorithm - Extended', () => {
         children: [],
       });
       
+      // 创建一个模拟的 gridLayoutTree，需要有 getNode 方法
+      const mockGridLayoutTree = {
+        getNode: (index: number) => ({
+          layoutData: {
+            columns: { sets: [] },
+            rows: { sets: [] },
+          },
+        }),
+        getSubtree: () => null,
+        nodes: [],
+      };
+      
       const constraintSpace = createConstraintSpace({
         availableWidth: 800,
         availableHeight: 600,
-        gridLayoutTree: {}, // 模拟子网格
+        gridLayoutTree: mockGridLayoutTree as any,
       });
       
       const algorithm = new GridMeasureAlgorithm();

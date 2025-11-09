@@ -3,6 +3,7 @@
  */
 
 import { GridArrangeAlgorithm } from '../../../../src/layouts/grid/grid-arrange';
+import { GridMeasureAlgorithm } from '../../../../src/layouts/grid/grid-measure';
 import { createGridNode } from '../../../../src/utils/layouts/grid/grid-node-factory';
 import { createConstraintSpace } from '../../../../src/utils/common/constraint-space-factory';
 import { GridStyle } from '../../../../src/types/layouts/grid/grid-style';
@@ -47,10 +48,9 @@ describe('GridArrangeAlgorithm - Extended', () => {
         availableHeight: 600,
       });
       
-      const measureResult = {
-        width: 300,
-        height: 150,
-      };
+      // 先执行测量，获取完整的 measureResult
+      const measureAlgorithm = new GridMeasureAlgorithm();
+      const measureResult = measureAlgorithm.measure(node, constraintSpace);
       
       const algorithm = new GridArrangeAlgorithm();
       const result = algorithm.arrange(node, constraintSpace, measureResult);
@@ -107,10 +107,9 @@ describe('GridArrangeAlgorithm - Extended', () => {
         availableHeight: 600,
       });
       
-      const measureResult = {
-        width: 200,
-        height: 50,
-      };
+      // 先执行测量，获取完整的 measureResult
+      const measureAlgorithm = new GridMeasureAlgorithm();
+      const measureResult = measureAlgorithm.measure(node, constraintSpace);
       
       const algorithm = new GridArrangeAlgorithm();
       const result = algorithm.arrange(node, constraintSpace, measureResult);
@@ -138,10 +137,9 @@ describe('GridArrangeAlgorithm - Extended', () => {
         availableHeight: 600,
       });
       
-      const measureResult = {
-        width: 0,
-        height: 0,
-      };
+      // 先执行测量，获取完整的 measureResult
+      const measureAlgorithm = new GridMeasureAlgorithm();
+      const measureResult = measureAlgorithm.measure(node, constraintSpace);
       
       const algorithm = new GridArrangeAlgorithm();
       const result = algorithm.arrange(node, constraintSpace, measureResult);
