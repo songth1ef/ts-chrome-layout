@@ -152,10 +152,12 @@ npm run format
 ## 文档
 
 - [📊 进度概览](./docs/PROGRESS.md) - 项目进度报告
+- [项目状态](./docs/STATUS.md) - 详细状态文档
 - [架构设计](./docs/ARCHITECTURE.md) - 详细架构说明
 - [API 文档](./docs/API.md) - 完整 API 参考
 - [使用示例](./docs/EXAMPLES.md) - 更多使用示例
 - [实现计划](./IMPLEMENTATION_PLAN.md) - 完整实现计划
+- [文档索引](./docs/README.md) - 所有文档索引
 
 ## 许可证
 
