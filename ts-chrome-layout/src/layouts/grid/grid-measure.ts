@@ -16,7 +16,7 @@ import {
   GridItemData,
   GridLayoutData,
 } from '../../types/layouts/grid/grid-data';
-import { GridItemStyle } from '../../types/layouts/grid/grid-position';
+import { GridItemStyle, GridPosition } from '../../types/layouts/grid/grid-position';
 import { GridTrackSizingAlgorithm } from './grid-track-sizing';
 
 /**
@@ -533,21 +533,120 @@ export class GridMeasureAlgorithm {
   /**
    * 从节点获取网格项样式
    */
-  private getItemStyleFromNode(_node: LayoutNode): GridItemStyle {
-    // 简化实现：从节点的 style 属性中提取
-    // TODO: 实现完整的样式解析
+  private getItemStyleFromNode(node: LayoutNode): GridItemStyle {
+    // 从节点的 style 属性中提取网格项样式
+    const style = node.style as any;
+    
+    // 解析 grid-column-start
+    let gridColumnStart: GridPosition | undefined = undefined;
+    if (style?.gridColumnStart) {
+      gridColumnStart = this.parseGridPosition(style.gridColumnStart);
+    } else if (style?.gridColumn) {
+      const parts = String(style.gridColumn).split('/').map((s: string) => s.trim());
+      if (parts[0]) {
+        gridColumnStart = this.parseGridPosition(parts[0]);
+      }
+    }
+    
+    // 解析 grid-column-end
+    let gridColumnEnd: GridPosition | undefined = undefined;
+    if (style?.gridColumnEnd) {
+      gridColumnEnd = this.parseGridPosition(style.gridColumnEnd);
+    } else if (style?.gridColumn) {
+      const parts = String(style.gridColumn).split('/').map((s: string) => s.trim());
+      if (parts[1]) {
+        gridColumnEnd = this.parseGridPosition(parts[1]);
+      } else if (parts[0] && this.isSpanValue(parts[0])) {
+        gridColumnEnd = { type: 'span', value: this.extractSpanValue(parts[0]) };
+      }
+    }
+    
+    // 解析 grid-row-start
+    let gridRowStart: GridPosition | undefined = undefined;
+    if (style?.gridRowStart) {
+      gridRowStart = this.parseGridPosition(style.gridRowStart);
+    } else if (style?.gridRow) {
+      const parts = String(style.gridRow).split('/').map((s: string) => s.trim());
+      if (parts[0]) {
+        gridRowStart = this.parseGridPosition(parts[0]);
+      }
+    }
+    
+    // 解析 grid-row-end
+    let gridRowEnd: GridPosition | undefined = undefined;
+    if (style?.gridRowEnd) {
+      gridRowEnd = this.parseGridPosition(style.gridRowEnd);
+    } else if (style?.gridRow) {
+      const parts = String(style.gridRow).split('/').map((s: string) => s.trim());
+      if (parts[1]) {
+        gridRowEnd = this.parseGridPosition(parts[1]);
+      } else if (parts[0] && this.isSpanValue(parts[0])) {
+        gridRowEnd = { type: 'span', value: this.extractSpanValue(parts[0]) };
+      }
+    }
+    
     return {
-      gridColumnStart: { type: 'auto' },
-      gridColumnEnd: { type: 'auto' },
-      gridRowStart: { type: 'auto' },
-      gridRowEnd: { type: 'auto' },
+      gridColumnStart,
+      gridColumnEnd,
+      gridRowStart,
+      gridRowEnd,
     };
+  }
+  
+  /**
+   * 解析网格位置值
+   */
+  private parseGridPosition(value: any): GridPosition {
+    if (typeof value === 'string') {
+      // 检查是否是 span 值
+      if (value.startsWith('span')) {
+        const spanMatch = value.match(/span\s+(\d+)/);
+        if (spanMatch) {
+          return { type: 'span', value: parseInt(spanMatch[1], 10) };
+        }
+        return { type: 'span', value: 1 };
+      }
+      
+      // 检查是否是命名线或区域
+      if (value !== 'auto') {
+        // 尝试解析为数字（命名线）
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue)) {
+          return { type: 'explicit', value: numValue };
+        }
+        // 否则作为命名线处理
+        return { type: 'explicit', value: 0, namedLine: value };
+      }
+    }
+    
+    if (typeof value === 'number') {
+      return { type: 'explicit', value };
+    }
+    
+    return { type: 'auto' };
+  }
+  
+  /**
+   * 检查是否是 span 值
+   */
+  private isSpanValue(value: string): boolean {
+    return value.startsWith('span');
+  }
+  
+  /**
+   * 提取 span 值
+   */
+  private extractSpanValue(value: string): number {
+    const match = value.match(/span\s+(\d+)/);
+    return match ? parseInt(match[1], 10) : 1;
   }
   
   /**
    * 计算自动重复次数
    * 
    * 对应 Chromium: ComputeAutomaticRepetitions()
+   * 
+   * 根据可用空间和轨道尺寸计算 auto-fill 或 auto-fit 的重复次数
    */
   private computeAutoRepetitions(
     tracks: any[],
@@ -556,21 +655,67 @@ export class GridMeasureAlgorithm {
     if (typeof availableSize === 'string' && availableSize === 'auto') {
       return 1;
     }
-    // 简化实现：如果有 auto-fill/auto-fit，计算重复次数
-    // TODO: 实现完整的自动重复计算
+    
+    if (typeof availableSize !== 'number' || availableSize <= 0) {
+      return 1;
+    }
+    
+    // 查找 auto-fill 或 auto-fit 的 repeat
     for (const track of tracks) {
       if (
         track.type === 'repeat' &&
         (track.count === 'auto-fill' || track.count === 'auto-fit')
       ) {
-        if (typeof availableSize === 'number' && availableSize > 0) {
-          // 简化的计算：假设每个轨道平均 100px
-          return Math.max(1, Math.floor(availableSize / 100));
+        // 计算重复轨道列表的总尺寸
+        const repeatTracks = track.tracks || [];
+        if (repeatTracks.length === 0) {
+          return 1;
         }
-        return 1;
+        
+        // 计算单个重复单元的最小尺寸
+        let minRepeatSize = 0;
+        for (const repeatTrack of repeatTracks) {
+          minRepeatSize += this.calculateTrackMinSize(repeatTrack);
+        }
+        
+        if (minRepeatSize <= 0) {
+          return 1;
+        }
+        
+        // 计算可以容纳多少个重复单元
+        // 考虑轨道之间的间距（简化：假设每个重复单元之间有 0 间距）
+        const repetitions = Math.max(1, Math.floor(availableSize / minRepeatSize));
+        
+        return repetitions;
       }
     }
+    
     return 1;
+  }
+  
+  /**
+   * 计算轨道的最小尺寸
+   */
+  private calculateTrackMinSize(track: any): number {
+    switch (track.type) {
+      case 'fixed':
+        return track.value || 0;
+      case 'fr':
+        // fr 轨道在计算最小尺寸时，假设为 0（实际尺寸在后续计算中确定）
+        return 0;
+      case 'auto':
+      case 'min-content':
+        // 这些类型的最小尺寸需要根据内容计算，这里简化返回一个默认值
+        return 0;
+      case 'max-content':
+        // max-content 的最小尺寸也需要根据内容计算
+        return 0;
+      case 'minmax':
+        // minmax 的最小尺寸是其 min 值
+        return this.calculateTrackMinSize(track.min || { type: 'auto' });
+      default:
+        return 0;
+    }
   }
   
   /**

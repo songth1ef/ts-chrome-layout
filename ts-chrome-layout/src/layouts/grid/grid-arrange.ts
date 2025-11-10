@@ -269,8 +269,14 @@ export class GridArrangeAlgorithm {
     const rows = layoutData.rows as GridTrackCollectionImpl;
     
     const gridStyle = node.style as GridStyle;
-    const gridWidth = this.calculateTotalSize(columns, gridStyle?.columnGap || 0);
-    const gridHeight = this.calculateTotalSize(rows, gridStyle?.rowGap || 0);
+    const columnGap = gridStyle?.columnGap || 0;
+    const rowGap = gridStyle?.rowGap || 0;
+    const gridWidth = this.calculateTotalSize(columns, columnGap);
+    const gridHeight = this.calculateTotalSize(rows, rowGap);
+    
+    // 计算轨道数量
+    const columnCount = this.getTrackCount(columns);
+    const rowCount = this.getTrackCount(rows);
     
     // 计算可用空间
     const availableWidth = typeof node.constraintSpace?.availableWidth === 'number'
@@ -288,7 +294,8 @@ export class GridArrangeAlgorithm {
     if (justifyContent && freeWidth > 0) {
       offsetX = this.calculateContentAlignmentOffset(
         justifyContent as ContentAlignment,
-        freeWidth
+        freeWidth,
+        columnCount
       );
     }
     
@@ -297,11 +304,23 @@ export class GridArrangeAlgorithm {
     if (alignContent && freeHeight > 0) {
       offsetY = this.calculateContentAlignmentOffset(
         alignContent as ContentAlignment,
-        freeHeight
+        freeHeight,
+        rowCount
       );
     }
     
     return { offsetX, offsetY };
+  }
+  
+  /**
+   * 获取轨道数量
+   */
+  private getTrackCount(collection: GridTrackCollectionImpl): number {
+    let count = 0;
+    for (const set of collection.sets) {
+      count += set.trackCount;
+    }
+    return count;
   }
   
   /**
@@ -363,11 +382,13 @@ export class GridArrangeAlgorithm {
    * 
    * @param alignment - 对齐方式
    * @param freeSpace - 可用空间
+   * @param trackCount - 轨道数量
    * @returns 对齐偏移量
    */
   private calculateContentAlignmentOffset(
     alignment: ContentAlignment | string,
-    freeSpace: number
+    freeSpace: number,
+    trackCount: number
   ): number {
     switch (alignment) {
       case ContentAlignment.Start:
@@ -381,23 +402,30 @@ export class GridArrangeAlgorithm {
         return freeSpace / 2;
       case ContentAlignment.SpaceBetween:
       case 'space-between':
-        // space-between: 第一个项在开始，最后一个项在结束，中间项均匀分布
+        // space-between: 第一个轨道在开始，最后一个轨道在结束，中间轨道均匀分布
         // 对于整个网格，偏移为 0（第一个轨道在开始位置）
+        // 轨道之间的间距会在轨道尺寸计算中处理
         return 0;
       case ContentAlignment.SpaceAround:
       case 'space-around':
         // space-around: 每个轨道周围有相等的空间
         // 第一个轨道前的空间是轨道间空间的一半
-        // 简化实现：返回轨道间空间的一半
-        // 注意：完整实现需要知道轨道数量
-        return freeSpace / (2 * 2); // 简化：假设有 2 个轨道
+        // 轨道间空间 = freeSpace / trackCount
+        // 第一个轨道前的空间 = (freeSpace / trackCount) / 2
+        if (trackCount <= 0) {
+          return 0;
+        }
+        return freeSpace / (trackCount * 2);
       case ContentAlignment.SpaceEvenly:
       case 'space-evenly':
         // space-evenly: 所有空间均匀分布（包括两端）
         // 第一个轨道前的空间等于轨道间空间
-        // 简化实现：返回均匀分配的空间
-        // 注意：完整实现需要知道轨道数量
-        return freeSpace / (2 + 1); // 简化：假设有 2 个轨道
+        // 轨道间空间 = freeSpace / (trackCount + 1)
+        // 第一个轨道前的空间 = freeSpace / (trackCount + 1)
+        if (trackCount <= 0) {
+          return 0;
+        }
+        return freeSpace / (trackCount + 1);
       case ContentAlignment.Stretch:
       case 'stretch':
         // stretch: 拉伸网格填充容器（在尺寸计算阶段处理）
