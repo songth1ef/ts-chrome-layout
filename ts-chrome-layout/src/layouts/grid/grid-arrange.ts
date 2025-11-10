@@ -365,12 +365,38 @@ export class GridArrangeAlgorithm {
       
       // 应用 align-items（行方向对齐）
       if (alignItems && areaHeight > itemHeight) {
-        const offset = this.calculateItemAlignmentOffset(
-          alignItems,
-          areaHeight,
-          itemHeight
-        );
-        placement.y += offset;
+        // 检查是否为基线对齐
+        if (alignItems === ItemAlignment.Baseline || alignItems === 'baseline') {
+          // 基线对齐：使用 measure 阶段计算的基线对齐偏移
+          const baselineAlignmentOffset = (item as any).baselineAlignmentOffset || 0;
+          placement.y += baselineAlignmentOffset;
+        } else {
+          // 其他对齐方式：使用标准对齐计算
+          const offset = this.calculateItemAlignmentOffset(
+            alignItems,
+            areaHeight,
+            itemHeight
+          );
+          placement.y += offset;
+        }
+      }
+      
+      // 处理 align-self（如果项有单独的对齐设置）
+      const itemRowAlignment = item.rowAlignment;
+      if (itemRowAlignment && itemRowAlignment !== ItemAlignment.Baseline) {
+        // 如果项有 align-self，且不是 baseline，覆盖 align-items
+        if (areaHeight > itemHeight) {
+          const offset = this.calculateItemAlignmentOffset(
+            itemRowAlignment,
+            areaHeight,
+            itemHeight
+          );
+          placement.y += offset;
+        }
+      } else if (itemRowAlignment === ItemAlignment.Baseline) {
+        // 如果项有 align-self: baseline，使用基线对齐
+        const baselineAlignmentOffset = (item as any).baselineAlignmentOffset || 0;
+        placement.y += baselineAlignmentOffset;
       }
     }
   }
@@ -468,8 +494,9 @@ export class GridArrangeAlgorithm {
         return 0;
       case ItemAlignment.Baseline:
       case 'baseline':
-        // baseline 需要基线计算，这里简化处理为 start
-        // 完整实现应该使用 computeGridItemBaselines 计算的基线偏移
+        // baseline 对齐使用 computeGridItemBaselines 计算的基线偏移
+        // 基线对齐偏移已经在 measure 阶段计算并存储在 item 中
+        // 这里返回 0，因为基线对齐偏移会在 applyItemAlignment 中单独处理
         return 0;
       default:
         return 0;

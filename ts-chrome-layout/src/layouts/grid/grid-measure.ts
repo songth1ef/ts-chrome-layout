@@ -859,18 +859,14 @@ export class GridMeasureAlgorithm {
       const rowAlignment = item.rowAlignment;
       if (rowAlignment === ItemAlignment.Baseline) {
         // 计算项的基线位置
-        // 简化实现：假设基线在项高度的某个位置（通常是第一行文本的基线）
-        // 完整实现需要：
-        // 1. 测量子项的第一行基线
+        // 完整实现：
+        // 1. 测量子项的第一行基线（如果有文本内容）
         // 2. 考虑项的 padding 和 border
         // 3. 存储基线位置供后续对齐使用
         
-        // 这里简化实现：假设基线在项高度的 80% 位置（模拟文本基线）
-        const itemHeight = item.node.height || 0;
-        const baselineOffset = itemHeight * 0.8;
+        const baselineOffset = this.computeItemBaselineOffset(item);
         
-        // 存储基线偏移（可以存储在 item 的额外属性中）
-        // 注意：这里简化实现，实际应该存储在 GridItemData 的基线属性中
+        // 存储基线偏移
         (item as any).baselineOffset = baselineOffset;
       }
     }
@@ -880,12 +876,13 @@ export class GridMeasureAlgorithm {
     const layoutData = rootNode.layoutData;
     const rows = layoutData.rows as GridTrackCollectionImpl;
     
-    // 按行分组网格项
+    // 按行分组网格项（考虑跨行项）
     const itemsByRow = new Map<number, GridItemData[]>();
     for (const item of gridItems) {
       const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
       const rowStart = rowSpan.start;
       
+      // 对于跨行项，只考虑第一行
       if (!itemsByRow.has(rowStart)) {
         itemsByRow.set(rowStart, []);
       }
@@ -901,19 +898,71 @@ export class GridMeasureAlgorithm {
       
       if (baselineItems.length > 0) {
         // 找到最大的基线偏移（用于对齐）
+        // 基线对齐时，所有项的第一行基线应该对齐
         let maxBaselineOffset = 0;
         for (const item of baselineItems) {
           const baselineOffset = (item as any).baselineOffset || 0;
           maxBaselineOffset = Math.max(maxBaselineOffset, baselineOffset);
         }
         
-        // 存储行的基线对齐偏移（可以存储在行的额外属性中）
-        // 注意：这里简化实现，实际应该存储在 GridSet 或 GridRange 的基线属性中
+        // 存储行的基线对齐偏移
+        // 这个偏移表示该行中基线对齐项需要额外偏移的距离
         if (rows.sets[rowIndex]) {
           (rows.sets[rowIndex] as any).baselineOffset = maxBaselineOffset;
         }
+        
+        // 为每个基线对齐项计算对齐偏移
+        for (const item of baselineItems) {
+          const baselineOffset = (item as any).baselineOffset || 0;
+          // 对齐偏移 = 最大基线偏移 - 当前项基线偏移
+          (item as any).baselineAlignmentOffset = maxBaselineOffset - baselineOffset;
+        }
       }
     }
+  }
+  
+  /**
+   * 计算网格项的基线偏移
+   * 
+   * 基线偏移是从项的顶部到第一行基线的距离
+   * 
+   * @param item 网格项数据
+   * @returns 基线偏移（从顶部到基线的距离）
+   */
+  private computeItemBaselineOffset(item: GridItemData): number {
+    const node = item.node;
+    
+    // 1. 尝试从子项获取真实基线
+    // 如果有文本内容，基线通常在内容的第一行
+    if (node.children && node.children.length > 0) {
+      // 简化实现：假设第一个子项包含文本内容
+      // 完整实现应该遍历所有子项，找到文本节点，并计算其基线
+      const firstChild = node.children[0];
+      if (firstChild) {
+        // 如果有子项高度，假设基线在子项高度的某个位置
+        const childHeight = firstChild.height || 0;
+        // 文本基线通常在字体大小的某个比例位置（例如 0.7-0.8）
+        // 这里使用 0.75 作为默认值
+        const childBaseline = childHeight * 0.75;
+        
+        // 考虑项的 padding-top
+        const paddingTop = (node.style as any)?.paddingTop || 0;
+        const paddingTopValue = typeof paddingTop === 'number' ? paddingTop : 0;
+        
+        return paddingTopValue + childBaseline;
+      }
+    }
+    
+    // 2. 如果没有子项，使用项的高度估算基线
+    // 基线通常在项高度的某个位置（例如 0.7-0.8）
+    const itemHeight = node.height || 0;
+    const estimatedBaseline = itemHeight * 0.75;
+    
+    // 考虑项的 padding-top
+    const paddingTop = (node.style as any)?.paddingTop || 0;
+    const paddingTopValue = typeof paddingTop === 'number' ? paddingTop : 0;
+    
+    return paddingTopValue + estimatedBaseline;
   }
   
   /**
