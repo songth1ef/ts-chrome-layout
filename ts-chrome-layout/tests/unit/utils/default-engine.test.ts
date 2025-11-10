@@ -231,4 +231,84 @@ describe('createDefaultEngine', () => {
     expect(result.width).toBeGreaterThanOrEqual(0);
     expect(result.height).toBeGreaterThanOrEqual(0);
   });
+
+  it('应该处理配置选项合并', () => {
+    const engine = createDefaultEngine({
+      enableValidation: false,
+      enablePerformanceMonitoring: false,
+      autoRegisterDefaults: false,
+    });
+
+    expect(engine).toBeInstanceOf(LayoutEngine);
+  });
+
+  it('应该处理空配置', () => {
+    const engine = createDefaultEngine({});
+    expect(engine).toBeInstanceOf(LayoutEngine);
+  });
+
+  it('应该处理未定义的配置', () => {
+    const engine = createDefaultEngine(undefined);
+    expect(engine).toBeInstanceOf(LayoutEngine);
+  });
+
+  it('应该能够处理嵌套布局', () => {
+    const engine = createDefaultEngine();
+
+    const childStyle: GridStyle = {
+      layoutType: 'grid',
+      gridTemplateColumns: [{ type: 'fixed', value: 50 }],
+      gridTemplateRows: [{ type: 'fixed', value: 50 }],
+    };
+
+    const parentStyle: GridStyle = {
+      layoutType: 'grid',
+      gridTemplateColumns: [{ type: 'fixed', value: 100 }],
+      gridTemplateRows: [{ type: 'fixed', value: 100 }],
+    };
+
+    const childNode: LayoutNode = {
+      id: 'child',
+      layoutType: 'grid',
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      contentWidth: 0,
+      contentHeight: 0,
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: childStyle,
+      children: [],
+    };
+
+    const parentNode: LayoutNode = {
+      id: 'parent',
+      layoutType: 'grid',
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      contentWidth: 0,
+      contentHeight: 0,
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: parentStyle,
+      children: [childNode],
+    };
+
+    const constraintSpace = createConstraintSpace({
+      availableWidth: 300,
+      availableHeight: 200,
+    });
+
+    const result = engine.layout(parentNode, constraintSpace);
+    expect(result).toBeDefined();
+    expect(result.children).toBeDefined();
+    if (result.children) {
+      expect(result.children.length).toBeGreaterThan(0);
+    }
+  });
 });

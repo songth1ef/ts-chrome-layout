@@ -56,6 +56,58 @@ describe('Performance Utils', () => {
       });
       expect(result).toBe('done');
     });
+
+    it('应该处理返回 Promise 的函数', async () => {
+      const result = await measureAsync('promise', async () => {
+        return new Promise<number>(resolve => {
+          setTimeout(() => resolve(100), 5);
+        });
+      });
+      expect(result).toBe(100);
+    });
+
+    it('应该处理多个连续的异步操作', async () => {
+      const results: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const result = await measureAsync(`async-${i}`, async () => {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          return i;
+        });
+        results.push(result);
+      }
+      expect(results).toEqual([0, 1, 2]);
+    });
+  });
+
+  describe('性能测量边界情况', () => {
+    it('应该处理立即返回的函数', () => {
+      const result = measureSync('immediate', () => {
+        return 'immediate';
+      });
+      expect(result).toBe('immediate');
+    });
+
+    it('应该处理返回 undefined 的函数', () => {
+      const result = measureSync('undefined', () => {
+        return undefined;
+      });
+      expect(result).toBeUndefined();
+    });
+
+    it('应该处理返回 null 的函数', () => {
+      const result = measureSync('null', () => {
+        return null;
+      });
+      expect(result).toBeNull();
+    });
+
+    it('应该处理抛出非 Error 对象的函数', () => {
+      expect(() => {
+        measureSync('throw-string', () => {
+          throw 'String error';
+        });
+      }).toThrow('String error');
+    });
   });
 });
 

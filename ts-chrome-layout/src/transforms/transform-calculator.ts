@@ -20,6 +20,10 @@ export class TransformCalculator {
    * 计算变换矩阵
    * 
    * 对应 Chromium: TransformHelper::ComputeTransform()
+   * 
+   * 支持 preserve-3d 和 flat 模式：
+   * - preserve-3d: 保持 3D 变换，不扁平化
+   * - flat: 将 3D 变换扁平化为 2D
    */
   static computeTransform(
     style: TransformStyle,
@@ -33,11 +37,29 @@ export class TransformCalculator {
     // 从变换操作列表创建矩阵
     let matrix = TransformMatrix.fromOperations(style.transform);
 
+    // 应用透视变换
+    if (style.perspective && style.perspective !== 'none') {
+      const perspectiveOrigin = style.perspectiveOrigin
+        ? this.computeTransformOrigin(style.perspectiveOrigin, referenceBox)
+        : { x: referenceBox.width / 2, y: referenceBox.height / 2, z: 0 };
+      const perspectiveMatrix = this.computePerspective(
+        typeof style.perspective === 'number' ? style.perspective : 0,
+        perspectiveOrigin
+      );
+      matrix = perspectiveMatrix.multiply(matrix);
+    }
+
     // 应用变换原点
     if (includeTransformOrigin && style.transformOrigin) {
       const origin = this.computeTransformOrigin(style.transformOrigin, referenceBox);
       matrix = this.applyTransformOrigin(matrix, origin);
     }
+
+    // 处理 transform-style: flat（扁平化 3D 变换）
+    if (style.transformStyle === 'flat') {
+      matrix = matrix.flatten();
+    }
+    // transform-style: preserve-3d 或未指定时，保持 3D 变换
 
     return matrix;
   }
