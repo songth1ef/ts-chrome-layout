@@ -1,7 +1,17 @@
 import { createDefaultEngine } from '../../../src/utils/common/default-engine';
 import { LayoutEngine } from '../../../src/core/layout-engine';
-import { LayoutNode } from '../../../src/types/common/layout-node';
+import { BoxStrut, LayoutNode } from '../../../src/types/common/layout-node';
 import { createConstraintSpace } from '../../../src/utils/common/constraint-space-factory';
+import { GridStyle } from '../../../src/types/layouts/grid/grid-style';
+import { FlexStyle } from '../../../src/types/layouts/flex/flex-style';
+import { BlockStyle } from '../../../src/types/layouts/block/block-style';
+import { InlineStyle } from '../../../src/types/layouts/inline/inline-style';
+import { TableStyle } from '../../../src/types/layouts/table/table-style';
+import { FlexDirection } from '../../../src/types/common/enums';
+
+function createZeroStrut(): BoxStrut {
+  return { top: 0, right: 0, bottom: 0, left: 0 };
+}
 
 describe('createDefaultEngine', () => {
   it('should create a LayoutEngine instance', () => {
@@ -11,8 +21,12 @@ describe('createDefaultEngine', () => {
 
   it('should register all layout algorithms', () => {
     const engine = createDefaultEngine();
-    
-    // 通过尝试布局来验证算法已注册
+
+    const gridStyle: GridStyle = {
+      layoutType: 'grid',
+      gridTemplateColumns: [{ type: 'fixed', value: 100 }],
+      gridTemplateRows: [{ type: 'fixed', value: 50 }],
+    };
     const gridNode: LayoutNode = {
       id: 'test-grid',
       layoutType: 'grid',
@@ -22,22 +36,18 @@ describe('createDefaultEngine', () => {
       height: 0,
       contentWidth: 0,
       contentHeight: 0,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      border: { top: 0, right: 0, bottom: 0, left: 0 },
-      style: {
-        layoutType: 'grid',
-        gridTemplateColumns: [{ type: 'fixed', value: 100 }],
-        gridTemplateRows: [{ type: 'fixed', value: 50 }],
-      } as any,
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: gridStyle,
       children: [],
     };
-    
+
     const constraintSpace = createConstraintSpace({
       availableWidth: 300,
       availableHeight: 200,
     });
-    
+
     // 如果算法未注册，layout会抛出错误
     expect(() => engine.layout(gridNode, constraintSpace)).not.toThrow();
   });
@@ -53,7 +63,15 @@ describe('createDefaultEngine', () => {
 
   it('should be able to layout a grid node', () => {
     const engine = createDefaultEngine();
-    
+
+    const gridStyle: GridStyle = {
+      layoutType: 'grid',
+      gridTemplateColumns: [
+        { type: 'fixed', value: 100 },
+        { type: 'fr', value: 1 },
+      ],
+      gridTemplateRows: [{ type: 'fixed', value: 50 }],
+    };
     const node: LayoutNode = {
       id: 'test-grid',
       layoutType: 'grid',
@@ -63,16 +81,10 @@ describe('createDefaultEngine', () => {
       height: 0,
       contentWidth: 0,
       contentHeight: 0,
-      style: {
-        layoutType: 'grid',
-        gridTemplateColumns: [
-          { type: 'fixed', value: 100 },
-          { type: 'fr', value: 1 },
-        ],
-        gridTemplateRows: [
-          { type: 'fixed', value: 50 },
-        ],
-      } as any,
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: gridStyle,
       children: [],
     };
 
@@ -89,7 +101,11 @@ describe('createDefaultEngine', () => {
 
   it('should be able to layout a flex node', () => {
     const engine = createDefaultEngine();
-    
+
+    const flexStyle: FlexStyle = {
+      layoutType: 'flex',
+      flexDirection: FlexDirection.Row,
+    };
     const node: LayoutNode = {
       id: 'test-flex',
       layoutType: 'flex',
@@ -99,10 +115,10 @@ describe('createDefaultEngine', () => {
       height: 0,
       contentWidth: 0,
       contentHeight: 0,
-      style: {
-        layoutType: 'flex',
-        flexDirection: 'row',
-      },
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: flexStyle,
       children: [],
     };
 
@@ -119,7 +135,10 @@ describe('createDefaultEngine', () => {
 
   it('should be able to layout a block node', () => {
     const engine = createDefaultEngine();
-    
+
+    const blockStyle: BlockStyle = {
+      layoutType: 'block',
+    };
     const node: LayoutNode = {
       id: 'test-block',
       layoutType: 'block',
@@ -129,12 +148,10 @@ describe('createDefaultEngine', () => {
       height: 0,
       contentWidth: 0,
       contentHeight: 0,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      border: { top: 0, right: 0, bottom: 0, left: 0 },
-      style: {
-        layoutType: 'block',
-      },
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: blockStyle,
       children: [],
     };
 
@@ -151,7 +168,10 @@ describe('createDefaultEngine', () => {
 
   it('should be able to layout an inline node', () => {
     const engine = createDefaultEngine();
-    
+
+    const inlineStyle: InlineStyle = {
+      layoutType: 'inline',
+    };
     const node: LayoutNode = {
       id: 'test-inline',
       layoutType: 'inline',
@@ -161,12 +181,10 @@ describe('createDefaultEngine', () => {
       height: 0,
       contentWidth: 0,
       contentHeight: 0,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      border: { top: 0, right: 0, bottom: 0, left: 0 },
-      style: {
-        layoutType: 'inline',
-      },
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: inlineStyle,
       children: [],
     };
 
@@ -183,7 +201,10 @@ describe('createDefaultEngine', () => {
 
   it('should be able to layout a table node', () => {
     const engine = createDefaultEngine();
-    
+
+    const tableStyle: TableStyle = {
+      layoutType: 'table',
+    };
     const node: LayoutNode = {
       id: 'test-table',
       layoutType: 'table',
@@ -193,12 +214,10 @@ describe('createDefaultEngine', () => {
       height: 0,
       contentWidth: 0,
       contentHeight: 0,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      border: { top: 0, right: 0, bottom: 0, left: 0 },
-      style: {
-        layoutType: 'table',
-      },
+      margin: createZeroStrut(),
+      padding: createZeroStrut(),
+      border: createZeroStrut(),
+      style: tableStyle,
       children: [],
     };
 
