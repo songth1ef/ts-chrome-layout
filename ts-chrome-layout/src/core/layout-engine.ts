@@ -17,6 +17,7 @@ import {
 import { LayoutValidator } from './validator';
 import { getLogger } from './logger';
 import { LRUCache } from '../utils/common/cache';
+import { quickHash } from '../utils/common/hash';
 
 /**
  * 布局引擎配置
@@ -48,6 +49,12 @@ export interface LayoutEngineConfig {
   
   // 是否自动注册默认算法
   autoRegisterDefaults?: boolean;
+  
+  // 缓存失效策略
+  cacheInvalidationStrategy?: 'aggressive' | 'conservative' | 'smart';
+  
+  // 是否启用增量更新
+  enableIncrementalUpdate?: boolean;
 }
 
 /**
@@ -80,6 +87,8 @@ export class LayoutEngine {
       performanceMonitor: config.performanceMonitor ?? new DefaultPerformanceMonitor(),
       cache: config.cache ?? (config.enableCache ? new LRUCache<string, LayoutResult>(config.cacheSize ?? 100) as LayoutCache<LayoutResult> : undefined),
       autoRegisterDefaults: config.autoRegisterDefaults ?? false,
+      cacheInvalidationStrategy: config.cacheInvalidationStrategy ?? 'smart',
+      enableIncrementalUpdate: config.enableIncrementalUpdate ?? false,
     };
     
     // 自动注册默认算法
@@ -123,6 +132,8 @@ export class LayoutEngine {
   
   /**
    * 执行布局
+   * 
+   * 优化：支持增量更新和智能缓存失效
    */
   layout(node: LayoutNode, constraintSpace: ConstraintSpace): LayoutResult {
     // 生成缓存键
@@ -132,8 +143,19 @@ export class LayoutEngine {
     
     // 尝试从缓存获取
     if (cacheKey && this.config.cache?.has(cacheKey)) {
-      getLogger().debug(`Cache hit for node: ${node.id}`);
-      return this.config.cache!.get(cacheKey)!;
+      const cachedResult = this.config.cache!.get(cacheKey)!;
+      
+      // 检查是否需要重新计算（增量更新）
+      if (this.config.enableIncrementalUpdate) {
+        if (!this.shouldInvalidateCache(node, constraintSpace, cachedResult)) {
+          getLogger().debug(`Cache hit for node: ${node.id}`);
+          return cachedResult;
+        }
+        getLogger().debug(`Cache invalidated for node: ${node.id}, recalculating...`);
+      } else {
+        getLogger().debug(`Cache hit for node: ${node.id}`);
+        return cachedResult;
+      }
     }
     
     const context: LayoutContext = {
@@ -155,6 +177,53 @@ export class LayoutEngine {
     }
     
     return result;
+  }
+  
+  /**
+   * 检查是否应该使缓存失效
+   * 
+   * 根据缓存失效策略决定是否重新计算
+   */
+  private shouldInvalidateCache(
+    node: LayoutNode,
+    constraintSpace: ConstraintSpace,
+    cachedResult: LayoutResult
+  ): boolean {
+    const strategy = this.config.cacheInvalidationStrategy || 'smart';
+    
+    switch (strategy) {
+      case 'aggressive':
+        // 激进策略：总是重新计算
+        return true;
+        
+      case 'conservative':
+        // 保守策略：只在明显变化时失效
+        return this.hasNodeChanged(node, cachedResult.node);
+        
+      case 'smart':
+      default:
+        // 智能策略：检查关键属性
+        // 1. 检查约束空间是否变化
+        if (constraintSpace.availableWidth !== cachedResult.constraintSpace?.availableWidth ||
+            constraintSpace.availableHeight !== cachedResult.constraintSpace?.availableHeight) {
+          return true;
+        }
+        
+        // 2. 检查子项数量是否变化
+        const currentChildrenCount = node.children?.length || 0;
+        const cachedChildrenCount = cachedResult.node?.children?.length || 0;
+        if (currentChildrenCount !== cachedChildrenCount) {
+          return true;
+        }
+        
+        // 3. 检查节点尺寸是否变化（如果已测量）
+        if (node.width !== cachedResult.node?.width ||
+            node.height !== cachedResult.node?.height) {
+          return true;
+        }
+        
+        return false;
+    }
   }
   
   /**
@@ -241,16 +310,55 @@ export class LayoutEngine {
   
   /**
    * 生成缓存键
+   * 
+   * 优化：使用快速哈希而不是JSON.stringify，提升性能
    */
   private generateCacheKey(node: LayoutNode, constraintSpace: ConstraintSpace): string {
-    // 简单的缓存键生成（可以优化为更复杂的哈希）
-    return JSON.stringify({
+    // 使用快速哈希生成缓存键
+    // 只包含影响布局结果的关键属性
+    const keyData = {
       id: node.id,
       layoutType: node.layoutType,
       availableWidth: constraintSpace.availableWidth,
       availableHeight: constraintSpace.availableHeight,
-      // 可以添加更多关键属性
-    });
+      // 添加节点尺寸（如果已测量）
+      width: node.width,
+      height: node.height,
+      // 添加子项数量（影响布局）
+      childrenCount: node.children?.length || 0,
+    };
+    
+    return quickHash(keyData, [
+      'id',
+      'layoutType',
+      'availableWidth',
+      'availableHeight',
+      'width',
+      'height',
+      'childrenCount',
+    ]);
+  }
+  
+  /**
+   * 检查节点是否可能影响缓存
+   * 
+   * 用于增量更新：如果节点没有变化，可以复用缓存
+   */
+  private hasNodeChanged(node: LayoutNode, cachedNode?: LayoutNode): boolean {
+    if (!cachedNode) {
+      return true;
+    }
+    
+    // 检查关键属性是否变化
+    if (node.id !== cachedNode.id ||
+        node.layoutType !== cachedNode.layoutType ||
+        (node.children?.length || 0) !== (cachedNode.children?.length || 0)) {
+      return true;
+    }
+    
+    // 检查样式是否变化（简化：只检查布局类型）
+    // 完整实现应该深度比较样式对象
+    return false;
   }
   
   /**
