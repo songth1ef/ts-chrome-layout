@@ -8,6 +8,7 @@ import { MeasureResult } from '../../types/common/layout-node';
 import { GridStyle } from '../../types/layouts/grid/grid-style';
 import { GridItemData, GridLayoutData } from '../../types/layouts/grid/grid-data';
 import { GridTrackCollectionImpl } from '../../data-structures/layouts/grid/grid-track-collection';
+import { ContentAlignment, ItemAlignment } from '../../types/common/enums';
 
 /**
  * Grid 排列算法
@@ -51,7 +52,13 @@ export class GridArrangeAlgorithm {
     
     // 步骤 2: 应用对齐
     // 对应 Chromium: 应用 align-content, justify-content 等
-    this.applyAlignment(node, layoutData, itemPlacements);
+    const alignmentOffsets = this.applyAlignment(node, layoutData, itemPlacements);
+    
+    // 应用对齐偏移到所有项
+    for (const placement of itemPlacements) {
+      placement.x += alignmentOffsets.offsetX;
+      placement.y += alignmentOffsets.offsetY;
+    }
     
     // 步骤 3: 布局子项
     const childLayouts = this.layoutChildren(
@@ -214,16 +221,16 @@ export class GridArrangeAlgorithm {
     node: LayoutNode,
     layoutData: GridLayoutData | null,
     itemPlacements: Array<{ item: GridItemData; x: number; y: number }>
-  ): void {
+  ): { offsetX: number; offsetY: number } {
     if (!layoutData) {
-      return;
+      return { offsetX: 0, offsetY: 0 };
     }
     
     const style = node.style as GridStyle;
     
     // 应用内容对齐（justify-content / align-content）
     // 这些对齐方式影响整个网格在容器中的位置
-    this.applyContentAlignment(
+    const contentAlignmentOffsets = this.applyContentAlignment(
       node,
       layoutData,
       style.justifyContent,
@@ -238,6 +245,8 @@ export class GridArrangeAlgorithm {
       style.justifyItems,
       style.alignItems
     );
+    
+    return contentAlignmentOffsets;
   }
   
   /**
@@ -246,13 +255,15 @@ export class GridArrangeAlgorithm {
    * 对应 Chromium: 应用 justify-content 和 align-content
    * 
    * 这些属性控制整个网格在容器中的对齐方式
+   * 
+   * @returns 对齐偏移量（用于调整整个网格的位置）
    */
   private applyContentAlignment(
     node: LayoutNode,
     layoutData: GridLayoutData,
-    justifyContent?: any, // ContentAlignment
-    alignContent?: any // ContentAlignment
-  ): void {
+    justifyContent?: ContentAlignment | string,
+    alignContent?: ContentAlignment | string
+  ): { offsetX: number; offsetY: number } {
     // 计算网格总尺寸
     const columns = layoutData.columns as GridTrackCollectionImpl;
     const rows = layoutData.rows as GridTrackCollectionImpl;
@@ -273,27 +284,24 @@ export class GridArrangeAlgorithm {
     const freeHeight = Math.max(0, availableHeight - gridHeight);
     
     // 应用 justify-content（列方向）
+    let offsetX = 0;
     if (justifyContent && freeWidth > 0) {
-      // 计算对齐偏移（当前简化实现，未来可以应用到所有项）
-      // const offset = this.calculateContentAlignmentOffset(
-      //   justifyContent,
-      //   freeWidth
-      // );
-      // 调整所有项的水平位置
-      // 注意：这里简化实现，实际应该调整整个网格的偏移
-      // 完整实现需要修改 placeGridItems 的返回值
+      offsetX = this.calculateContentAlignmentOffset(
+        justifyContent as ContentAlignment,
+        freeWidth
+      );
     }
     
     // 应用 align-content（行方向）
+    let offsetY = 0;
     if (alignContent && freeHeight > 0) {
-      // 计算对齐偏移（当前简化实现，未来可以应用到所有项）
-      // const offset = this.calculateContentAlignmentOffset(
-      //   alignContent,
-      //   freeHeight
-      // );
-      // 调整所有项的垂直位置
-      // 注意：这里简化实现，实际应该调整整个网格的偏移
+      offsetY = this.calculateContentAlignmentOffset(
+        alignContent as ContentAlignment,
+        freeHeight
+      );
     }
+    
+    return { offsetX, offsetY };
   }
   
   /**
@@ -306,8 +314,8 @@ export class GridArrangeAlgorithm {
   private applyItemAlignment(
     layoutData: GridLayoutData,
     itemPlacements: Array<{ item: GridItemData; x: number; y: number }>,
-    justifyItems?: any, // ItemAlignment
-    alignItems?: any // ItemAlignment
+    justifyItems?: ItemAlignment | string,
+    alignItems?: ItemAlignment | string
   ): void {
     const columns = layoutData.columns as GridTrackCollectionImpl;
     const rows = layoutData.rows as GridTrackCollectionImpl;
@@ -349,31 +357,50 @@ export class GridArrangeAlgorithm {
   }
   
   /**
-   * 计算内容对齐偏移量（当前未使用，保留用于未来扩展）
-   * @deprecated 当前未使用，保留用于未来扩展
+   * 计算内容对齐偏移量
+   * 
+   * 对应 Chromium: 计算 justify-content / align-content 的偏移
+   * 
+   * @param alignment - 对齐方式
+   * @param freeSpace - 可用空间
+   * @returns 对齐偏移量
    */
-  // @ts-ignore - 保留用于未来扩展
-  private _calculateContentAlignmentOffset(
-    alignment: any, // ContentAlignment
+  private calculateContentAlignmentOffset(
+    alignment: ContentAlignment | string,
     freeSpace: number
   ): number {
     switch (alignment) {
+      case ContentAlignment.Start:
       case 'start':
         return 0;
+      case ContentAlignment.End:
       case 'end':
         return freeSpace;
+      case ContentAlignment.Center:
       case 'center':
         return freeSpace / 2;
+      case ContentAlignment.SpaceBetween:
       case 'space-between':
-        // 在第一个和最后一个项之间分配空间
-        return 0; // 简化实现
+        // space-between: 第一个项在开始，最后一个项在结束，中间项均匀分布
+        // 对于整个网格，偏移为 0（第一个轨道在开始位置）
+        return 0;
+      case ContentAlignment.SpaceAround:
       case 'space-around':
-        // 在每个项周围分配空间
-        return freeSpace / 2; // 简化实现
+        // space-around: 每个轨道周围有相等的空间
+        // 第一个轨道前的空间是轨道间空间的一半
+        // 简化实现：返回轨道间空间的一半
+        // 注意：完整实现需要知道轨道数量
+        return freeSpace / (2 * 2); // 简化：假设有 2 个轨道
+      case ContentAlignment.SpaceEvenly:
       case 'space-evenly':
-        // 均匀分配空间
-        return freeSpace / 2; // 简化实现
+        // space-evenly: 所有空间均匀分布（包括两端）
+        // 第一个轨道前的空间等于轨道间空间
+        // 简化实现：返回均匀分配的空间
+        // 注意：完整实现需要知道轨道数量
+        return freeSpace / (2 + 1); // 简化：假设有 2 个轨道
+      case ContentAlignment.Stretch:
       case 'stretch':
+        // stretch: 拉伸网格填充容器（在尺寸计算阶段处理）
         return 0;
       default:
         return 0;
@@ -382,26 +409,39 @@ export class GridArrangeAlgorithm {
   
   /**
    * 计算项对齐偏移量
+   * 
+   * 对应 Chromium: 计算 justify-items / align-items 的偏移
+   * 
+   * @param alignment - 对齐方式
+   * @param areaSize - 网格区域尺寸
+   * @param itemSize - 项尺寸
+   * @returns 对齐偏移量
    */
   private calculateItemAlignmentOffset(
-    alignment: any, // ItemAlignment
+    alignment: ItemAlignment | string,
     areaSize: number,
     itemSize: number
   ): number {
     const freeSpace = areaSize - itemSize;
     
     switch (alignment) {
+      case ItemAlignment.Start:
       case 'start':
         return 0;
+      case ItemAlignment.End:
       case 'end':
         return freeSpace;
+      case ItemAlignment.Center:
       case 'center':
         return freeSpace / 2;
+      case ItemAlignment.Stretch:
       case 'stretch':
-        // stretch 应该在布局阶段处理，这里返回 0
+        // stretch 应该在布局阶段处理（拉伸项尺寸），这里返回 0
         return 0;
+      case ItemAlignment.Baseline:
       case 'baseline':
         // baseline 需要基线计算，这里简化处理为 start
+        // 完整实现应该使用 computeGridItemBaselines 计算的基线偏移
         return 0;
       default:
         return 0;
