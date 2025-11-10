@@ -516,6 +516,8 @@ export class GridPlacementAlgorithm {
   
   /**
    * 检查是否可以在指定位置放置
+   * 
+   * 优化：提前终止检查，避免不必要的循环
    */
   private canPlaceAt(
     rowStart: number,
@@ -524,8 +526,26 @@ export class GridPlacementAlgorithm {
     columnSize: number,
     occupied: Set<string>
   ): boolean {
-    for (let r = rowStart; r < rowStart + rowSize; r++) {
-      for (let c = columnStart; c < columnStart + columnSize; c++) {
+    // 边界检查：确保位置在有效范围内
+    if (rowStart < 0 || columnStart < 0 || rowSize <= 0 || columnSize <= 0) {
+      return false;
+    }
+    
+    // 优化：先检查边界单元格，通常冲突更容易发生在边界
+    const rowEnd = rowStart + rowSize;
+    const columnEnd = columnStart + columnSize;
+    
+    // 检查四个角
+    if (occupied.has(`${rowStart},${columnStart}`) ||
+        occupied.has(`${rowStart},${columnEnd - 1}`) ||
+        occupied.has(`${rowEnd - 1},${columnStart}`) ||
+        occupied.has(`${rowEnd - 1},${columnEnd - 1}`)) {
+      return false;
+    }
+    
+    // 检查所有单元格
+    for (let r = rowStart; r < rowEnd; r++) {
+      for (let c = columnStart; c < columnEnd; c++) {
         if (occupied.has(`${r},${c}`)) {
           return false;
         }
@@ -533,5 +553,6 @@ export class GridPlacementAlgorithm {
     }
     return true;
   }
+  
 }
 

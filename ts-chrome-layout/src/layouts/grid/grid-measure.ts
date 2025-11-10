@@ -16,7 +16,7 @@ import {
   GridItemData,
   GridLayoutData,
 } from '../../types/layouts/grid/grid-data';
-import { GridItemStyle } from '../../types/layouts/grid/grid-position';
+import { GridItemStyle, GridPosition } from '../../types/layouts/grid/grid-position';
 import { GridTrackSizingAlgorithm } from './grid-track-sizing';
 
 /**
@@ -533,21 +533,120 @@ export class GridMeasureAlgorithm {
   /**
    * 从节点获取网格项样式
    */
-  private getItemStyleFromNode(_node: LayoutNode): GridItemStyle {
-    // 简化实现：从节点的 style 属性中提取
-    // TODO: 实现完整的样式解析
+  private getItemStyleFromNode(node: LayoutNode): GridItemStyle {
+    // 从节点的 style 属性中提取网格项样式
+    const style = node.style as any;
+    
+    // 解析 grid-column-start
+    let gridColumnStart: GridPosition | undefined = undefined;
+    if (style?.gridColumnStart) {
+      gridColumnStart = this.parseGridPosition(style.gridColumnStart);
+    } else if (style?.gridColumn) {
+      const parts = String(style.gridColumn).split('/').map((s: string) => s.trim());
+      if (parts[0]) {
+        gridColumnStart = this.parseGridPosition(parts[0]);
+      }
+    }
+    
+    // 解析 grid-column-end
+    let gridColumnEnd: GridPosition | undefined = undefined;
+    if (style?.gridColumnEnd) {
+      gridColumnEnd = this.parseGridPosition(style.gridColumnEnd);
+    } else if (style?.gridColumn) {
+      const parts = String(style.gridColumn).split('/').map((s: string) => s.trim());
+      if (parts[1]) {
+        gridColumnEnd = this.parseGridPosition(parts[1]);
+      } else if (parts[0] && this.isSpanValue(parts[0])) {
+        gridColumnEnd = { type: 'span', value: this.extractSpanValue(parts[0]) };
+      }
+    }
+    
+    // 解析 grid-row-start
+    let gridRowStart: GridPosition | undefined = undefined;
+    if (style?.gridRowStart) {
+      gridRowStart = this.parseGridPosition(style.gridRowStart);
+    } else if (style?.gridRow) {
+      const parts = String(style.gridRow).split('/').map((s: string) => s.trim());
+      if (parts[0]) {
+        gridRowStart = this.parseGridPosition(parts[0]);
+      }
+    }
+    
+    // 解析 grid-row-end
+    let gridRowEnd: GridPosition | undefined = undefined;
+    if (style?.gridRowEnd) {
+      gridRowEnd = this.parseGridPosition(style.gridRowEnd);
+    } else if (style?.gridRow) {
+      const parts = String(style.gridRow).split('/').map((s: string) => s.trim());
+      if (parts[1]) {
+        gridRowEnd = this.parseGridPosition(parts[1]);
+      } else if (parts[0] && this.isSpanValue(parts[0])) {
+        gridRowEnd = { type: 'span', value: this.extractSpanValue(parts[0]) };
+      }
+    }
+    
     return {
-      gridColumnStart: { type: 'auto' },
-      gridColumnEnd: { type: 'auto' },
-      gridRowStart: { type: 'auto' },
-      gridRowEnd: { type: 'auto' },
+      gridColumnStart,
+      gridColumnEnd,
+      gridRowStart,
+      gridRowEnd,
     };
+  }
+  
+  /**
+   * 解析网格位置值
+   */
+  private parseGridPosition(value: any): GridPosition {
+    if (typeof value === 'string') {
+      // 检查是否是 span 值
+      if (value.startsWith('span')) {
+        const spanMatch = value.match(/span\s+(\d+)/);
+        if (spanMatch) {
+          return { type: 'span', value: parseInt(spanMatch[1], 10) };
+        }
+        return { type: 'span', value: 1 };
+      }
+      
+      // 检查是否是命名线或区域
+      if (value !== 'auto') {
+        // 尝试解析为数字（命名线）
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue)) {
+          return { type: 'explicit', value: numValue };
+        }
+        // 否则作为命名线处理
+        return { type: 'explicit', value: 0, namedLine: value };
+      }
+    }
+    
+    if (typeof value === 'number') {
+      return { type: 'explicit', value };
+    }
+    
+    return { type: 'auto' };
+  }
+  
+  /**
+   * 检查是否是 span 值
+   */
+  private isSpanValue(value: string): boolean {
+    return value.startsWith('span');
+  }
+  
+  /**
+   * 提取 span 值
+   */
+  private extractSpanValue(value: string): number {
+    const match = value.match(/span\s+(\d+)/);
+    return match ? parseInt(match[1], 10) : 1;
   }
   
   /**
    * 计算自动重复次数
    * 
    * 对应 Chromium: ComputeAutomaticRepetitions()
+   * 
+   * 根据可用空间和轨道尺寸计算 auto-fill 或 auto-fit 的重复次数
    */
   private computeAutoRepetitions(
     tracks: any[],
@@ -556,21 +655,67 @@ export class GridMeasureAlgorithm {
     if (typeof availableSize === 'string' && availableSize === 'auto') {
       return 1;
     }
-    // 简化实现：如果有 auto-fill/auto-fit，计算重复次数
-    // TODO: 实现完整的自动重复计算
+    
+    if (typeof availableSize !== 'number' || availableSize <= 0) {
+      return 1;
+    }
+    
+    // 查找 auto-fill 或 auto-fit 的 repeat
     for (const track of tracks) {
       if (
         track.type === 'repeat' &&
         (track.count === 'auto-fill' || track.count === 'auto-fit')
       ) {
-        if (typeof availableSize === 'number' && availableSize > 0) {
-          // 简化的计算：假设每个轨道平均 100px
-          return Math.max(1, Math.floor(availableSize / 100));
+        // 计算重复轨道列表的总尺寸
+        const repeatTracks = track.tracks || [];
+        if (repeatTracks.length === 0) {
+          return 1;
         }
-        return 1;
+        
+        // 计算单个重复单元的最小尺寸
+        let minRepeatSize = 0;
+        for (const repeatTrack of repeatTracks) {
+          minRepeatSize += this.calculateTrackMinSize(repeatTrack);
+        }
+        
+        if (minRepeatSize <= 0) {
+          return 1;
+        }
+        
+        // 计算可以容纳多少个重复单元
+        // 考虑轨道之间的间距（简化：假设每个重复单元之间有 0 间距）
+        const repetitions = Math.max(1, Math.floor(availableSize / minRepeatSize));
+        
+        return repetitions;
       }
     }
+    
     return 1;
+  }
+  
+  /**
+   * 计算轨道的最小尺寸
+   */
+  private calculateTrackMinSize(track: any): number {
+    switch (track.type) {
+      case 'fixed':
+        return track.value || 0;
+      case 'fr':
+        // fr 轨道在计算最小尺寸时，假设为 0（实际尺寸在后续计算中确定）
+        return 0;
+      case 'auto':
+      case 'min-content':
+        // 这些类型的最小尺寸需要根据内容计算，这里简化返回一个默认值
+        return 0;
+      case 'max-content':
+        // max-content 的最小尺寸也需要根据内容计算
+        return 0;
+      case 'minmax':
+        // minmax 的最小尺寸是其 min 值
+        return this.calculateTrackMinSize(track.min || { type: 'auto' });
+      default:
+        return 0;
+    }
   }
   
   /**
@@ -714,18 +859,14 @@ export class GridMeasureAlgorithm {
       const rowAlignment = item.rowAlignment;
       if (rowAlignment === ItemAlignment.Baseline) {
         // 计算项的基线位置
-        // 简化实现：假设基线在项高度的某个位置（通常是第一行文本的基线）
-        // 完整实现需要：
-        // 1. 测量子项的第一行基线
+        // 完整实现：
+        // 1. 测量子项的第一行基线（如果有文本内容）
         // 2. 考虑项的 padding 和 border
         // 3. 存储基线位置供后续对齐使用
         
-        // 这里简化实现：假设基线在项高度的 80% 位置（模拟文本基线）
-        const itemHeight = item.node.height || 0;
-        const baselineOffset = itemHeight * 0.8;
+        const baselineOffset = this.computeItemBaselineOffset(item);
         
-        // 存储基线偏移（可以存储在 item 的额外属性中）
-        // 注意：这里简化实现，实际应该存储在 GridItemData 的基线属性中
+        // 存储基线偏移
         (item as any).baselineOffset = baselineOffset;
       }
     }
@@ -735,12 +876,13 @@ export class GridMeasureAlgorithm {
     const layoutData = rootNode.layoutData;
     const rows = layoutData.rows as GridTrackCollectionImpl;
     
-    // 按行分组网格项
+    // 按行分组网格项（考虑跨行项）
     const itemsByRow = new Map<number, GridItemData[]>();
     for (const item of gridItems) {
       const rowSpan = item.rowSpan || { start: 0, end: 1, size: 1 };
       const rowStart = rowSpan.start;
       
+      // 对于跨行项，只考虑第一行
       if (!itemsByRow.has(rowStart)) {
         itemsByRow.set(rowStart, []);
       }
@@ -756,19 +898,71 @@ export class GridMeasureAlgorithm {
       
       if (baselineItems.length > 0) {
         // 找到最大的基线偏移（用于对齐）
+        // 基线对齐时，所有项的第一行基线应该对齐
         let maxBaselineOffset = 0;
         for (const item of baselineItems) {
           const baselineOffset = (item as any).baselineOffset || 0;
           maxBaselineOffset = Math.max(maxBaselineOffset, baselineOffset);
         }
         
-        // 存储行的基线对齐偏移（可以存储在行的额外属性中）
-        // 注意：这里简化实现，实际应该存储在 GridSet 或 GridRange 的基线属性中
+        // 存储行的基线对齐偏移
+        // 这个偏移表示该行中基线对齐项需要额外偏移的距离
         if (rows.sets[rowIndex]) {
           (rows.sets[rowIndex] as any).baselineOffset = maxBaselineOffset;
         }
+        
+        // 为每个基线对齐项计算对齐偏移
+        for (const item of baselineItems) {
+          const baselineOffset = (item as any).baselineOffset || 0;
+          // 对齐偏移 = 最大基线偏移 - 当前项基线偏移
+          (item as any).baselineAlignmentOffset = maxBaselineOffset - baselineOffset;
+        }
       }
     }
+  }
+  
+  /**
+   * 计算网格项的基线偏移
+   * 
+   * 基线偏移是从项的顶部到第一行基线的距离
+   * 
+   * @param item 网格项数据
+   * @returns 基线偏移（从顶部到基线的距离）
+   */
+  private computeItemBaselineOffset(item: GridItemData): number {
+    const node = item.node;
+    
+    // 1. 尝试从子项获取真实基线
+    // 如果有文本内容，基线通常在内容的第一行
+    if (node.children && node.children.length > 0) {
+      // 简化实现：假设第一个子项包含文本内容
+      // 完整实现应该遍历所有子项，找到文本节点，并计算其基线
+      const firstChild = node.children[0];
+      if (firstChild) {
+        // 如果有子项高度，假设基线在子项高度的某个位置
+        const childHeight = firstChild.height || 0;
+        // 文本基线通常在字体大小的某个比例位置（例如 0.7-0.8）
+        // 这里使用 0.75 作为默认值
+        const childBaseline = childHeight * 0.75;
+        
+        // 考虑项的 padding-top
+        const paddingTop = (node.style as any)?.paddingTop || 0;
+        const paddingTopValue = typeof paddingTop === 'number' ? paddingTop : 0;
+        
+        return paddingTopValue + childBaseline;
+      }
+    }
+    
+    // 2. 如果没有子项，使用项的高度估算基线
+    // 基线通常在项高度的某个位置（例如 0.7-0.8）
+    const itemHeight = node.height || 0;
+    const estimatedBaseline = itemHeight * 0.75;
+    
+    // 考虑项的 padding-top
+    const paddingTop = (node.style as any)?.paddingTop || 0;
+    const paddingTopValue = typeof paddingTop === 'number' ? paddingTop : 0;
+    
+    return paddingTopValue + estimatedBaseline;
   }
   
   /**

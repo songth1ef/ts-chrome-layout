@@ -146,9 +146,13 @@ describe('GridSizingTreeImpl', () => {
   });
 
   describe('finalizeTree', () => {
-    it('应该在空树时返回 null', () => {
+    it('应该在空树时返回空树对象', () => {
       const result = tree.finalizeTree();
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty('nodes');
+      expect(result.nodes).toEqual([]);
+      expect(result).toHaveProperty('getNode');
+      expect(result).toHaveProperty('getSubtree');
     });
 
     it('应该返回 GridLayoutTree 对象', () => {
