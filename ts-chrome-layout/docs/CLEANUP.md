@@ -83,6 +83,61 @@
 - ✅ 导出更清晰
 - ✅ 无重复注释
 
+### 4. 状态文档合并 ✅ (2025-01-XX)
+
+**问题**：
+- `docs/STATUS.md` 和 `docs/PROGRESS.md` 有大量重复内容
+- 数据不一致（STATUS.md 94%，PROGRESS.md 65%）
+
+**解决方案**：
+- `STATUS.md` 保留为详细状态文档，包含完整的工作记录
+- `PROGRESS.md` 简化为简洁概览，使用 STATUS.md 的最新数据
+- 明确两个文档的职责：PROGRESS.md 用于快速了解，STATUS.md 用于详细信息
+
+**结果**：
+- ✅ 数据一致性
+- ✅ 职责清晰
+- ✅ 减少重复
+
+### 5. 下一步计划文档清理 ✅ (2025-01-XX)
+
+**问题**：
+- `docs/NEXT_STEPS.md` 中有重复的"文档完善"部分（第145行和第171行）
+
+**解决方案**：
+- 删除低优先级中重复的"文档完善"部分
+- 保留中优先级中的完整版本
+
+**结果**：
+- ✅ 消除重复
+- ✅ 结构更清晰
+
+### 6. 工厂函数重构 ✅ (2025-01-XX)
+
+**问题**：
+- 5 个工厂函数（grid、flex、block、inline、table）有几乎相同的代码结构
+- 每个文件都重复定义 `defaultBoxStrut` 和相同的节点创建逻辑
+
+**解决方案**：
+- 创建 `src/utils/common/node-factory.ts` 通用工厂函数
+- 提取公共逻辑到 `createLayoutNode` 函数
+- 定义 `BaseNodeConfig` 接口供所有配置接口继承
+- 所有具体工厂函数简化为调用通用函数
+
+**结果**：
+- ✅ 代码重复减少约 80%
+- ✅ 更容易维护
+- ✅ 类型安全保持
+- ✅ 向后兼容（接口保持不变）
+
+**修改的文件**：
+- ✅ `src/utils/common/node-factory.ts` (新建)
+- ✅ `src/utils/layouts/grid/grid-node-factory.ts`
+- ✅ `src/utils/layouts/flex/flex-node-factory.ts`
+- ✅ `src/utils/layouts/block/block-node-factory.ts`
+- ✅ `src/utils/layouts/inline/inline-node-factory.ts`
+- ✅ `src/utils/layouts/table/table-node-factory.ts`
+
 ---
 
 ## 清理后的结构
