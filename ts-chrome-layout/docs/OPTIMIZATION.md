@@ -132,66 +132,7 @@
 
 ## 使用示例
 
-### 启用缓存和性能监控
-
-```typescript
-import { LayoutEngine, createDefaultEngine } from 'ts-chrome-layout';
-
-const engine = createDefaultEngine({
-  enableCache: true,
-  cacheSize: 200,
-  enablePerformanceMonitoring: true,
-});
-
-// 执行布局
-const result = engine.layout(node, constraintSpace);
-
-// 获取性能指标
-const metrics = engine.getPerformanceMetrics();
-console.log('Performance:', metrics);
-```
-
-### 自定义错误处理
-
-```typescript
-const engine = new LayoutEngine({
-  errorHandler: {
-    onError(error) {
-      // 发送到错误追踪服务
-      errorTrackingService.report(error);
-    },
-    shouldThrow(error) {
-      // 只抛出严重错误
-      return error.code === LayoutErrorCode.AlgorithmNotFound;
-    },
-  },
-});
-```
-
-### 自定义日志
-
-```typescript
-import { setLogger, ConsoleLogger, LogLevel } from 'ts-chrome-layout';
-
-setLogger(new ConsoleLogger(LogLevel.Debug));
-```
-
-## 性能建议
-
-1. **生产环境**：
-   - 启用缓存
-   - 禁用详细日志
-   - 禁用性能监控（除非需要）
-
-2. **开发环境**：
-   - 启用验证
-   - 启用详细日志
-   - 启用性能监控
-
-3. **测试环境**：
-   - 启用严格验证
-   - 启用性能监控
-   - 禁用缓存（确保测试准确性）
+详细的使用示例和配置方法请参考 [工程化文档](./ENGINEERING.md)。
 
 ## 未来优化方向
 
